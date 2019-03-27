@@ -12,6 +12,10 @@ apply plugin: 'java'
 apply plugin: 'application'
 apply plugin: 'org.hidetake.ssh'
 
+// Global settingsl
+ssh.settings {
+  knownHosts = allowAnyHosts    // Disable host key verification
+}
 
 mainClassName = 'com.nedap.university.Main'
 version = '0.0.1'
