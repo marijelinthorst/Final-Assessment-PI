@@ -25,9 +25,9 @@ You've got 11 work days to finish the assignment and demonstrate your final resu
 
 To be able to demonstrate your skills, you will be provided with a Raspberry Pi 3 Model B+ starter kit.
 The Raspberry Pi will be pre-installed with the Raspbian Stretch Lite image (a minimal Linux distro without GUI), Java 8, the Java Cryptography Extension (JCE) and some other configuration.
-When the device boots, an ad-hoc Wi-Fi network is set up.
+When the device boots, a Wi-Fi AP network is set up.
 The Raspberry Pi setup guide to configure your laptop and communicate with the device can be found further down this document.
-The ad-hoc network should be used to communicate between your laptop and the Raspberry Pis.
+The WiFi network should be used to communicate between your laptop and the Raspberry Pis.
 
 ## Requirements
 
@@ -165,10 +165,17 @@ The default credentials are:
  - Username: `pi`
  - Password: `raspberry`
 
+It's recommended to shutdown the Pi before disconnecting power. Just unplugging power may cause a corrupted filesystem.
+You can shutdown the Pi with the following command:
+
+`sudo shutdown -P now`
+
 ## Networking
 
-Besides the physical ethernet port, the Raspberry Pi is configured to start an ad-hoc Wi-Fi network on startup.
+Besides the physical ethernet port, the Raspberry Pi is configured to start a Wi-Fi Access point on startup.
 This network can be used to connect the Pi to your laptop without the need of switches/cables.
+
+**Important:** you may need to disable the Nedap security policy of you computer's VPN client.
 
 ### Physical ethernet
 
@@ -176,56 +183,20 @@ The physical adapter is configured to use DHCP to obtain an IP address.
 
 ### Wi-Fi
 
-The name of the Wi-Fi network is unique for each student.
+The name of the Wi-Fi network is unique for each student. The raspberry Pi is configured to start a DHCP server on the Wi-Fi interface. Your computer will automatically get an IP address from the Pi (range 172.16.1.2 - 172.16.1.100).
 
  - SSID: `nu-pi-$name`
- - Security: none (don't try this at home, kids!)
+ - Security: `WPA2`
+ - WiFi password: `nedap1234`
  - Static IP address: `172.16.1.1`
 
-#### Setup a Wi-Fi connection with the Pi
+We recommend you to change the Wi-Fi password once you're connected to the Pi. This can be done by editing the following file:
 
-For Mac users it's very easy to connect to the Wi-Fi network of the Pi.
-For Windows users it's a little bit more difficult because Microsoft decided to reduce support for ad-hoc Wi-Fi networks since Windows 8.1.
+`sudo vim /etc/hostapd/hostapd.conf`
 
-It's recommended to use a static IP address for the Wi-Fi adapter of your laptop:
+Replace the password on the following line:
 
-- IP: `172.16.1.2`
-- Subnet `255.255.0.0`
-
-**Important:** you may need to disable the Nedap security policy of you computer's VPN client.
-
-##### Mac
-
- 0. Open System Preferences -> Network.
- 0. (Optional) create a new location, so you don't mess with your current settings.
- 0. Select your Wi-Fi network in the adapter list.
- 0. Click on advanced and open the TCP/IP to change the static IP address / subnet.
- 0. Press apply and your Mac should be connected to the Wi-Fi network of the Pi.
-
-| Network                      | Advanced Wi-Fi preferences    |
-|------------------------------|------------------------------|
-| ![](doc/macOS-network-1.png) | ![](doc/macOS-network-2.png) |
-
-##### Windows
-
- 0. Open the Network and Sharing Center.
- 0. Click Set up a new connection or network.
- 0. Double click Manually connect to a wireless network.
- 0. Enter the SSID of the ad-hoc network into the Network name field.
- 0. Uncheck Start this connection automatically.
- 0. Click Next and then Close.
- 
-Open a command prompt and enter:
-
-`netsh wlan set profileparameter $ssid connectiontype=ibss connectionmode=manual`
-
-After setting up, run the following command whenever you want to connect:
-
-`netsh wlan connect $ssid`
-
-To remove the network profile from Windows, run the following command:
-
-`netsh wlan delete profile $ssid`
+`wpa_passphrase=nedap1234`
 
 ## Project setup
 
@@ -234,25 +205,18 @@ It contains a task to automatically send a JAR to the Raspberry Pi over SSH.
 
 ## Linux service
 
-To start and stop our service when the Pi starts, we need a service wrapper.
-Create a new wrapper using `sudo vi /lib/systemd/system/num2.service` and paste the following contents into it:
+To start and stop our service when the Pi starts, we need a service wrapper. We've created a service wrapper that start your Java application: `num2.service`. The service configuration can be found in:
 
-```
-[Unit]
-Description=Nedap U Service
-After=multi-user.agent
+`/lib/systemd/system/num2.service`
 
-[Service]
-Type=simple
-ExecStart=/usr/bin/java -jar /home/pi/NUM2.jar
-Restart=on-abort
-TimeoutStopSec=30
+The service is automatically started at boot. You can manually start/stop the service using:
 
-[Install]
-WantedBy=multi-user.target
-```
+`sudo systemctl start num2.service`
 
-After doing a reload with `sudo systemctl daemon-reload`, the service can be started by invoking `sudo systemctl start num2.service` and stopped with `sudo systemctl stop num2.service`.
+`sudo systemctl stop num2.service`
+
+If you modify the service configuration you have to reload the configuration:
+
+`sudo systemctl daemon-reload`
 
 See also [this resource](http://www.diegoacuna.me/how-to-run-a-script-as-a-service-in-raspberry-pi-raspbian-jessie/) about running scripts as services.
-
