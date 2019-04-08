@@ -1,12 +1,9 @@
 package com.nedap.university;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Scanner;
@@ -18,7 +15,7 @@ public class ClientMain {
   private boolean isFinished = false;
 
   // TODO give name??
-  private static InetAddress host;
+  private static InetAddress serverAddress;
   private static int clientPort = 8080;
   private static int serverPort;
   private static DatagramSocket socket;
@@ -27,9 +24,14 @@ public class ClientMain {
   
   // Packet info
   private int packetlength = 512;
+  private PackageMaker maker;
+  private PackageReader reader;
+  private SendQueue queue;
 
   /** main */
   public static void main(String[] args) {
+    
+    // make socket, broadcastIP, a packet to send and a package to receive
     try {
       socket = new DatagramSocket();
       socket.setBroadcast(true);
@@ -50,17 +52,33 @@ public class ClientMain {
     
     // send broadcast message and receive response from the server
     try {
-      socket.send(broadcastPacket);     
+      socket.send(broadcastPacket); 
+   // TODO: repeat
       socket.receive(responsePacket);
     } catch (IOException e) {
       System.out.println("ERROR: couldn't send or receive broadcast message!");
       e.printStackTrace();
     }
     
-    // get info from response packet from the server, data is useless at this point
-    host = responsePacket.getAddress();
-    serverPort = responsePacket.getPort();
-    
+    // get info from response packet from the server, data should be syn (hello) and ack
+    if (new String(responsePacket.getData()).equals("Hello + Ack")) {
+      serverAddress = responsePacket.getAddress();
+      serverPort = responsePacket.getPort(); 
+    } else {
+     //TODO; repeat;
+    }
+      
+    // Send ack
+    String ackMessage = "Hello";
+    byte[] ack = ackMessage.getBytes();
+    DatagramPacket ackPacket = new DatagramPacket(ack, ack.length, serverAddress, serverPort);
+    try {
+      socket.send(ackPacket);
+      // TODO: repeat
+    } catch (IOException e) {
+      System.out.println("ERROR: couldn't send ack message!");
+      e.printStackTrace();
+    }
     
     // construct new client object and start the user and server input threads
     ClientMain client = new ClientMain();
@@ -70,16 +88,18 @@ public class ClientMain {
   
   /**
    * constructor
-   * 
-   * @throws IOException
    */
   private ClientMain() {
     userIn = new Scanner(System.in);
+    maker = new PackageMaker(serverPort);
+    reader = new PackageReader();
+    queue = new SendQueue();
+    queue.start();
   }
 
 
   // ---------------- user input ---------------------------------
-  public void startUserInput() {
+  private void startUserInput() {
     Thread userInTread = new Thread() {
       public void run() {
         userEventLoop();
@@ -88,7 +108,7 @@ public class ClientMain {
     userInTread.start();
   }
 
-  public void userEventLoop() {
+  private void userEventLoop() {
     while (!isFinished) {
       try {
         Thread.sleep(250);
@@ -114,24 +134,25 @@ public class ClientMain {
     userIn.close();
   }
   
-  public boolean shouldAskInput() {
+  private boolean shouldAskInput() {
     // TODO
     return false;
   }
   
-  public void showPrompt() {
+  private void showPrompt() {
     // TODO determine intuitive TUI
     System.out.println("What do you want to do:");
     System.out.println("1. Upload file to the server");
     System.out.println("2. See a list of files the server has available for downloading");
-    System.out.println("3. See a list of files currently being downloading and/or uploading");
-    System.out.println("4. See uploading/downloading statistics");
-    System.out.println("5. Select a file to download, pause or resume downloading");
-    System.out.println("6. Exit");
+    System.out.println("3. See a list of files currently being downloaded and/or uploaded");
+    System.out.println("4. See a list of files currently paused");
+    System.out.println("5. See uploading/downloading statistics");
+    System.out.println("6. Select a file to download, pause or resume downloading");
+    System.out.println("7. Exit");
     System.out.println("Please enter the number of the action you wish to do");
   }
 
-  public void dispatchUILine(String input) {
+  private void dispatchUILine(String input) {
     switch (input) {
       case "1":
         System.out.println("1");
@@ -151,6 +172,9 @@ public class ClientMain {
       case "6":
         System.out.println("6");
         break;
+      case "7":
+        System.out.println("7");
+        break;
       default:
         System.out.println("That number is not  a valid choice!");
         break;
@@ -159,7 +183,7 @@ public class ClientMain {
   }
 
   // ---------------- server input ---------------------
-  public void startServerInput() {
+  private void startServerInput() {
     Thread serverInTread = new Thread() {
       public void run() {
          serverEventLoop();
@@ -168,23 +192,18 @@ public class ClientMain {
     serverInTread.start();
   }
 
-  public void serverEventLoop() {
+  private void serverEventLoop() {
     while (!isFinished) {
       try {
         byte[] buffer = new byte[packetlength];
-        DatagramPacket receivePacket = new DatagramPacket(buffer, buffer.length, broadcastIP, port);
+        DatagramPacket receivePacket = new DatagramPacket(buffer, buffer.length);
         socket.receive(receivePacket);
-        dispatchServerLine(receivePacket);
+        reader.readPackage(receivePacket);
       } catch (IOException e) {
         System.out.println("Sorry, cannot reach server");
         this.shutdown();
       }
     }
-  }
-
-  private void dispatchServerLine(DatagramPacket inputLine) {
-    // TODO Auto-generated method stub
-
   }
 
   // ---------------- shutdown ---------------------
