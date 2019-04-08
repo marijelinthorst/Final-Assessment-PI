@@ -8,7 +8,7 @@ import java.net.InetAddress;
 public class ServerMain {
   private static DatagramSocket socket;
   private static InetAddress clientAddress;
-  private static int clientPort;
+  private static int clientPort = 9090;
   private static int serverPort = 8080;
   
   // state
@@ -21,37 +21,41 @@ public class ServerMain {
   private SendQueue queue;
 
   public static void main(String[] args) {
+    System.out.println("Start server");
     
     // receive broadcast message from client
     byte[] buffer = new byte[512];
-    DatagramPacket bufferPacket = new DatagramPacket(buffer, buffer.length);
-    
+    DatagramPacket bufferPacket = new DatagramPacket(buffer, buffer.length);    
     try {
-      socket = new DatagramSocket();
+      socket = new DatagramSocket(serverPort);
       socket.setBroadcast(true);
+      System.out.println("Server created socket");
       socket.receive(bufferPacket);
+      System.out.println("Server received broadcast");
     } catch (IOException e) {
       System.out.println("ERROR: couldn't send or receive broadcast message!");
       e.printStackTrace();
     }
     
-    // get info from response packet from the server, data is useless at this point
+    // get info from response packet from the server
     clientAddress = bufferPacket.getAddress();
-    clientPort = bufferPacket.getPort(); //TODO: does this read des or source port?
+    clientPort = bufferPacket.getPort(); 
+    
     
     // send response + ack and wait for ack
-    String responseMessage = "Hello + Ack"; // TODO: misschien eigen header hier voor port en ack
+    String responseMessage = "SYN + ACK"; // TODO: misschien eigen header hier voor port en ack
     byte[] response = responseMessage.getBytes();
     DatagramPacket responsePacket = new DatagramPacket(response, response.length, clientAddress, clientPort);
     try {
       socket.send(responsePacket);
+      System.out.println("Server send syn+ack");
       socket.receive(bufferPacket);
-      if (new String(bufferPacket.getData()).equals("Ack")) {
-        ServerMain server = new ServerMain();
-        server.startClientInputLoop();
-      }
+      System.out.println("Server received message");  
+      ServerMain server = new ServerMain();
+      System.out.println("Server constructed");
+      server.startClientInputLoop();
     } catch (IOException e) {
-      // TODO Auto-generated catch block
+      System.out.println("ERROR: couldn't send SYN + ACK message!");
       e.printStackTrace();
     }
   }
@@ -59,7 +63,7 @@ public class ServerMain {
   /**
    * constructor
    */
-  private ServerMain() {
+  public ServerMain() {
     maker = new PackageMaker(serverPort);
     reader = new PackageReader();
     queue = new SendQueue();
@@ -67,7 +71,7 @@ public class ServerMain {
   }
 
   //---------------- Client input ---------------------
-  private void startClientInputLoop() {
+  public void startClientInputLoop() {
     while (!isFinished ) {
       try {
         byte[] buffer = new byte[packetlength];

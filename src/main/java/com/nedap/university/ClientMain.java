@@ -16,8 +16,8 @@ public class ClientMain {
 
   // TODO give name??
   private static InetAddress serverAddress;
-  private static int clientPort = 8080;
-  private static int serverPort;
+  private static int clientPort = 9090;
+  private static int serverPort =8080;
   private static DatagramSocket socket;
   private static InetAddress broadcastIP;
   private Scanner userIn;
@@ -31,11 +31,12 @@ public class ClientMain {
   /** main */
   public static void main(String[] args) {
     
+    System.out.println("Start client");
     // make socket, broadcastIP, a packet to send and a package to receive
     try {
-      socket = new DatagramSocket();
+      socket = new DatagramSocket(clientPort);
       socket.setBroadcast(true);
-      broadcastIP = InetAddress.getByName("255.255.255.255");
+      broadcastIP = InetAddress.getByName("localhost");
     } catch (SocketException e) {
       System.out.println("ERROR: couldn't construct a DatagramSocket object!");
       e.printStackTrace();
@@ -44,37 +45,35 @@ public class ClientMain {
       e.printStackTrace();
     }
     
-    String broadcastMessage = "Hello"; // TODO: misschien eigen header hier
+    String broadcastMessage = "SYN"; // TODO: misschien eigen header hier
     byte[] broadcast = broadcastMessage.getBytes();
-    DatagramPacket broadcastPacket = new DatagramPacket(broadcast, broadcast.length, broadcastIP, clientPort);
+    DatagramPacket broadcastPacket = new DatagramPacket(broadcast, broadcast.length, broadcastIP, serverPort);
     byte[] responseBuffer = new byte[512];
     DatagramPacket responsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
+    System.out.println("Client made broadcast message");
     
     // send broadcast message and receive response from the server
     try {
-      socket.send(broadcastPacket); 
-   // TODO: repeat
+      socket.send(broadcastPacket);
+      System.out.println("Client send broadcast message");
       socket.receive(responsePacket);
+      System.out.println("Client received message");
     } catch (IOException e) {
       System.out.println("ERROR: couldn't send or receive broadcast message!");
       e.printStackTrace();
     }
     
-    // get info from response packet from the server, data should be syn (hello) and ack
-    if (new String(responsePacket.getData()).equals("Hello + Ack")) {
-      serverAddress = responsePacket.getAddress();
-      serverPort = responsePacket.getPort(); 
-    } else {
-     //TODO; repeat;
-    }
+    // get info from response packet from the server
+    serverAddress = responsePacket.getAddress();
+    serverPort = responsePacket.getPort(); 
       
     // Send ack
-    String ackMessage = "Hello";
+    String ackMessage = "ACK";
     byte[] ack = ackMessage.getBytes();
     DatagramPacket ackPacket = new DatagramPacket(ack, ack.length, serverAddress, serverPort);
     try {
       socket.send(ackPacket);
-      // TODO: repeat
+      System.out.println("Client send ack");
     } catch (IOException e) {
       System.out.println("ERROR: couldn't send ack message!");
       e.printStackTrace();
@@ -82,6 +81,7 @@ public class ClientMain {
     
     // construct new client object and start the user and server input threads
     ClientMain client = new ClientMain();
+    System.out.println("Client constructed");
     client.startUserInput();
     client.startServerInput();
   }
@@ -89,7 +89,7 @@ public class ClientMain {
   /**
    * constructor
    */
-  private ClientMain() {
+  public ClientMain() {
     userIn = new Scanner(System.in);
     maker = new PackageMaker(serverPort);
     reader = new PackageReader();
@@ -99,7 +99,7 @@ public class ClientMain {
 
 
   // ---------------- user input ---------------------------------
-  private void startUserInput() {
+  public void startUserInput() {
     Thread userInTread = new Thread() {
       public void run() {
         userEventLoop();
@@ -108,7 +108,7 @@ public class ClientMain {
     userInTread.start();
   }
 
-  private void userEventLoop() {
+  public void userEventLoop() {
     while (!isFinished) {
       try {
         Thread.sleep(250);
@@ -134,12 +134,12 @@ public class ClientMain {
     userIn.close();
   }
   
-  private boolean shouldAskInput() {
+  public boolean shouldAskInput() {
     // TODO
-    return false;
+    return true;
   }
   
-  private void showPrompt() {
+  public void showPrompt() {
     // TODO determine intuitive TUI
     System.out.println("What do you want to do:");
     System.out.println("1. Upload file to the server");
@@ -152,7 +152,7 @@ public class ClientMain {
     System.out.println("Please enter the number of the action you wish to do");
   }
 
-  private void dispatchUILine(String input) {
+  public void dispatchUILine(String input) {
     switch (input) {
       case "1":
         System.out.println("1");
@@ -183,7 +183,7 @@ public class ClientMain {
   }
 
   // ---------------- server input ---------------------
-  private void startServerInput() {
+  public void startServerInput() {
     Thread serverInTread = new Thread() {
       public void run() {
          serverEventLoop();
@@ -192,7 +192,7 @@ public class ClientMain {
     serverInTread.start();
   }
 
-  private void serverEventLoop() {
+  public void serverEventLoop() {
     while (!isFinished) {
       try {
         byte[] buffer = new byte[packetlength];
