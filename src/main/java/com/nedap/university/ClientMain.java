@@ -24,7 +24,7 @@ public class ClientMain {
   
   // Packet info
   private int packetlength = 512;
-  private PackageMaker maker;
+  private Packet maker;
   private PackageReader reader;
   private SendQueue queue;
 
@@ -91,9 +91,9 @@ public class ClientMain {
    */
   public ClientMain() {
     userIn = new Scanner(System.in);
-    maker = new PackageMaker(serverPort);
+    maker = new Packet(socket);
     reader = new PackageReader();
-    queue = new SendQueue();
+    queue = new SendQueue(socket);
     queue.start();
   }
 
@@ -208,7 +208,8 @@ public class ClientMain {
 
   // ---------------- shutdown ---------------------
   private void shutdown() {
-    // TODO Auto-generated method stub
-
+    System.out.println("Shutting down");
+    this.isFinished = true;
+    // TODO
   }
 }

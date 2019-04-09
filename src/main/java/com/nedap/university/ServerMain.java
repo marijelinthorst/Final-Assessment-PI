@@ -16,7 +16,7 @@ public class ServerMain {
   private int packetlength = 512;
   
   // package
-  private PackageMaker maker;
+  private Packet maker;
   private PackageReader reader;
   private SendQueue queue;
 
@@ -64,9 +64,9 @@ public class ServerMain {
    * constructor
    */
   public ServerMain() {
-    maker = new PackageMaker(serverPort);
+    maker = new Packet(socket);
     reader = new PackageReader();
-    queue = new SendQueue();
+    queue = new SendQueue(socket);
     queue.start();
   }
 
