@@ -140,15 +140,15 @@ public class Packet {
     fin = FIN;
   }
   
-  public void setAvailableFilesList() {
+  public void setAvailableFilesListFlag() {
     afl = AFL;
   }
   
-  public void setDownloadingFilesList() {
+  public void setDownloadingFilesListFlag() {
     dfl = DFL;
   }
   
-  public void setPausedFilesList() {
+  public void setPausedFilesListFlag() {
     pfl = PFL;
   }
   

@@ -25,10 +25,10 @@ class PacketTest {
 
   @Test
   void testSyn() {
-    assertFalse(packet.hasSyn());
+    assertFalse(packet.hasSynchronizeFlag());
     packet.setSynchronizeFlag();
     packet.flagsToByte();
-    assertTrue(packet.hasSyn());
+    assertTrue(packet.hasSynchronizeFlag());
   }
 
   @Test
@@ -50,21 +50,21 @@ class PacketTest {
   @Test
   void testAfl() {
     assertFalse(packet.hasAvailableFilesListFlag());
-    packet.setAvailableFilesList();
+    packet.setAvailableFilesListFlag();
     packet.flagsToByte();
     assertTrue(packet.hasAvailableFilesListFlag());}
 
   @Test
   void testDfl() {
     assertFalse(packet.hasDownloadingFilesListFlag());
-    packet.setDownloadingFilesList();
+    packet.setDownloadingFilesListFlag();
     packet.flagsToByte();
     assertTrue(packet.hasDownloadingFilesListFlag());}
 
   @Test
   void testPfl() {
     assertFalse(packet.hasPausedFilesListFlag());
-    packet.setPausedFilesList();
+    packet.setPausedFilesListFlag();
     packet.flagsToByte();
     assertTrue(packet.hasPausedFilesListFlag());}
 
@@ -114,16 +114,16 @@ class PacketTest {
   @Test
   void testDifferentFlags() {
     assertFalse(packet.hasExitFlag());
-    assertFalse(packet.hasSyn());
+    assertFalse(packet.hasSynchronizeFlag());
     assertFalse(packet.hasResumeFlag());
     assertFalse(packet.hasAvailableFilesListFlag());
     packet.setExitFlag();
     packet.setSynchronizeFlag();
     packet.setResumeFlag();
-    packet.setAvailableFilesList();
+    packet.setAvailableFilesListFlag();
     packet.flagsToByte();
     assertTrue(packet.hasExitFlag());
-    assertTrue(packet.hasSyn());
+    assertTrue(packet.hasSynchronizeFlag());
     assertTrue(packet.hasResumeFlag());
     assertTrue(packet.hasAvailableFilesListFlag());
     assertFalse(packet.hasPauseFlag());
@@ -188,7 +188,7 @@ class PacketTest {
     
     Packet newPacket = new Packet (newDataPacket); 
     assertTrue(newPacket.hasExitFlag());
-    assertTrue(newPacket.hasSyn());
+    assertTrue(newPacket.hasSynchronizeFlag());
     assertEquals(newPacket.getSeqNumber(), 9234);
     assertEquals(newPacket.getChecksum(), 101);
   }
