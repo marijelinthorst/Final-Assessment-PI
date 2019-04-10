@@ -6,7 +6,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 
 import com.nedap.university.packets.PacketDealer;
-import com.nedap.university.packets.SendQueue;
 
 public class Server {
   private static DatagramSocket socket;
@@ -15,13 +14,12 @@ public class Server {
   private static int serverPort = 8080;
   
   // state
-  private boolean isFinished = true;
+  private boolean isFinished = false;
   private int packetlength = 512;
   
   // package
   //private Packet maker;
   private PacketDealer dealer;
-  private SendQueue queue;
 
   public static void main(String[] args) {
     System.out.println("Start server");
@@ -66,10 +64,7 @@ public class Server {
    * constructor
    */
   public Server() {
-    //maker = new Packet(clientAddress, clientPort);
-    dealer = new PacketDealer();
-    queue = new SendQueue(socket);
-    queue.start();
+    dealer = new PacketDealer(socket, clientAddress, clientPort);
   }
 
   //---------------- Client input ---------------------

@@ -19,7 +19,10 @@ public class SendQueue extends Thread {
   public void run() {
     while (true) {
       try {
-        socket.send(queue.take());
+        if (!queue.isEmpty()) {
+          System.out.println("Sending");
+          socket.send(queue.take());
+        }  
       } catch (InterruptedException e) {
         System.out.println("ERROR: couldn't take packet from queue");
         e.printStackTrace();
@@ -31,9 +34,23 @@ public class SendQueue extends Thread {
   }
   
   public void addToQueue(DatagramPacket packet) {
+    // TODO add timeout
+    // als timeout: 
+    // if (in queue) { 
+    //   new timeout
+    // } else if (boolean stop){
+    //   doe niks
+    // } else { 
+    //   retransmit queue.add(packet);
+    // }
     queue.add(packet);
   }
   
-  
+  public void stopTimeout(DatagramPacket packet) {
+    // TODO
+    // get timeout van packet
+    // stop timeout of 
+    // boolean stop van timeout = true;
+  }
 
 }
