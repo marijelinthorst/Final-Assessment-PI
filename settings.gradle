@@ -16,4 +16,4 @@ include 'api'
 include 'services:webservice'
 */
 
-rootProject.name = 'NUM2'
+rootProject.name = 'Final-Assesment-PI'
