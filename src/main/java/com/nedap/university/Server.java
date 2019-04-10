@@ -5,7 +5,10 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 
-public class ServerMain {
+import com.nedap.university.packets.PacketDealer;
+import com.nedap.university.packets.SendQueue;
+
+public class Server {
   private static DatagramSocket socket;
   private static InetAddress clientAddress;
   private static int clientPort = 9090;
@@ -16,8 +19,8 @@ public class ServerMain {
   private int packetlength = 512;
   
   // package
-  private Packet maker;
-  private PackageReader reader;
+  //private Packet maker;
+  private PacketDealer dealer;
   private SendQueue queue;
 
   public static void main(String[] args) {
@@ -41,9 +44,8 @@ public class ServerMain {
     clientAddress = bufferPacket.getAddress();
     clientPort = bufferPacket.getPort(); 
     
-    
-    // send response + ack and wait for ack
-    String responseMessage = "SYN + ACK"; // TODO: misschien eigen header hier voor port en ack
+    // send response + ack and wait for ack 
+    String responseMessage = "SYN + ACK";
     byte[] response = responseMessage.getBytes();
     DatagramPacket responsePacket = new DatagramPacket(response, response.length, clientAddress, clientPort);
     try {
@@ -51,7 +53,7 @@ public class ServerMain {
       System.out.println("Server send syn+ack");
       socket.receive(bufferPacket);
       System.out.println("Server received message");  
-      ServerMain server = new ServerMain();
+      Server server = new Server();
       System.out.println("Server constructed");
       server.startClientInputLoop();
     } catch (IOException e) {
@@ -63,9 +65,9 @@ public class ServerMain {
   /**
    * constructor
    */
-  public ServerMain() {
-    maker = new Packet(socket);
-    reader = new PackageReader();
+  public Server() {
+    //maker = new Packet(clientAddress, clientPort);
+    dealer = new PacketDealer();
     queue = new SendQueue(socket);
     queue.start();
   }
@@ -77,17 +79,17 @@ public class ServerMain {
         byte[] buffer = new byte[packetlength];
         DatagramPacket receivePacket = new DatagramPacket(buffer, buffer.length);
         socket.receive(receivePacket);
-        reader.readPackage(receivePacket);
+        dealer.readPackage(receivePacket);
       } catch (IOException e) {
         System.out.println("Sorry, cannot reach client");
         this.shutdown();
       }
     }
-    
   }
 
   //---------------- shutdown ---------------------
   private void shutdown() {
+    this.isFinished = true;
     // TODO Auto-generated method stub
     
   }

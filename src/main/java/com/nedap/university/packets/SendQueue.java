@@ -1,4 +1,4 @@
-package com.nedap.university;
+package com.nedap.university.packets;
 
 import java.io.IOException;
 import java.net.DatagramPacket;

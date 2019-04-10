@@ -1,9 +1,8 @@
-package com.nedap.university;
+package com.nedap.university.packets;
 
 import java.math.BigInteger;
 import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.util.Arrays;
+import java.net.InetAddress;
 
 public class Packet {
 
@@ -44,14 +43,26 @@ public class Packet {
   
   // variables
   byte[] data;
-  DatagramSocket socket;
+  InetAddress address;
+  int port;
+  
+  // lengths
+  final static int PACKETLENGTH = 512;
+  final static int FNL = 2;
+  final static int SNL = 4;
+  final static int ANL = 4;
+  final static int WSL = 2;
+  final static int CSL = 2;
+  final static int FL = 2;
+  static int contentLength;
   
   // header
-  byte[] filename;
+  byte[] fileNumber;
   byte[] seqNumber;
   byte[] ackNumber;
   byte[] windowSize;
   byte[] checksum;
+  byte[] content;
   
   // Flags
   byte syn = 0;
@@ -87,110 +98,130 @@ public class Packet {
   /**
    * constructors
    */
-  public Packet (DatagramSocket socket, DatagramPacket packet) {
+  public Packet (DatagramPacket packet) {
     this.data = packet.getData();
-    this.socket = socket;
+    this.address = packet.getAddress();
+    this.port = packet.getPort();
+    
+    this.fileNumber = new byte[FNL];
+    this.seqNumber = new byte[SNL];
+    this.ackNumber = new byte[ANL];
+    this.windowSize = new byte[WSL];
+    this.checksum = new byte[CSL];
+    contentLength = PACKETLENGTH - FNL - SNL - ANL - WSL - CSL;
+    this.content = new byte[contentLength];
   }
   
-  public Packet (DatagramSocket socket) {
-    data = new byte[512];
-    this.socket = socket;
+  public Packet (InetAddress address, int port) {
+    data = new byte[PACKETLENGTH];
+    this.address = address;
+    this.port = port;
+    
+    this.fileNumber = new byte[FNL];
+    this.seqNumber = new byte[SNL];
+    this.ackNumber = new byte[ANL];
+    this.windowSize = new byte[WSL];
+    this.checksum = new byte[CSL];
+    contentLength = PACKETLENGTH - FNL - SNL - ANL - WSL - CSL;
+    this.content = new byte[contentLength];
   }
   
   //--------------------------- Set flags ---------------------------------
   
-  public void setSyn() {
+  public void setSynchronizeFlag() {
     syn = SYN;
   }
   
-  public void setAck() {
+  public void setAcknowlegdementFlag() {
     ack = ACK;
   }
   
-  public void setFin() {
+  public void setFinalFlag() {
     fin = FIN;
   }
   
-  public void setAfl() {
+  public void setAvailableFilesList() {
     afl = AFL;
   }
   
-  public void setDfl() {
+  public void setDownloadingFilesList() {
     dfl = DFL;
   }
   
-  public void setPfl() {
+  public void setPausedFilesList() {
     pfl = PFL;
   }
   
-  public void setDown() {
+  public void setDownloadingFlag() {
     down = DOWN;
   }
   
-  public void setUp() {
+  public void setUploadingFlag() {
     up = UP;
   }
   
-  public void setPau() {
+  public void setPauseFlag() {
     pau = PAU;
   }
   
-  public void setRes() {
+  public void setResumeFlag() {
     res = RES;
   }
   
-  public void setStat() {
+  public void setStatisticsFlag() {
     stat = STAT;
   }
   
-  public void setExit() {
+  public void setExitFlag() {
     exit = EXIT;
   }
   
   //------------------------ Set header parts ---------------------------------
   
-  public void setFileName (String filename) {
-    this.filename = filename.getBytes();
-    data[0] = this.filename[0];
-    data[1] = this.filename[1];
+  public void setFileNumber (int fileNumber) {
+    byte[] byteArray = BigInteger.valueOf(fileNumber).toByteArray();
+    int start = this.fileNumber.length - byteArray.length;
+    for (int i = start; i< this.fileNumber.length; i++) {
+      data[i] = byteArray[i - start];
+    }
   }
   
   public void setSeqNumber (int seqNumber) {
     byte[] byteArray = BigInteger.valueOf(seqNumber).toByteArray();
-    this.seqNumber = byteArray;
-    data[2] = this.seqNumber[0];
-    data[3] = this.seqNumber[1];
-    data[4] = this.seqNumber[2];
-    data[5] = this.seqNumber[3];
+    int start = this.seqNumber.length - byteArray.length;
+    for (int i = start; i< this.seqNumber.length; i++) {
+      data[FNL+i] = byteArray[i - start];
+    }
   }
   
   public void setAckNumber (int ackNumber) {
     byte[] byteArray = BigInteger.valueOf(ackNumber).toByteArray();
-    this.ackNumber = byteArray;
-    data[6] = this.ackNumber[0];
-    data[7] = this.ackNumber[1];
-    data[8] = this.ackNumber[2];
-    data[9] = this.ackNumber[3];
+    int start = this.ackNumber.length - byteArray.length;
+    for (int i = start; i< this.ackNumber.length; i++) {
+      data[FNL+SNL+i] = byteArray[i - start];
+    }
   }
   
   public void setWindowSize (int windowSize) {
     byte[] byteArray = BigInteger.valueOf(windowSize).toByteArray();
-    this.windowSize = byteArray;
-    data[10] = this.windowSize[0];
-    data[11] = this.windowSize[1];
+    int start = this.windowSize.length - byteArray.length;
+    for (int i = start; i< this.windowSize.length; i++) {
+      data[FNL+SNL+ANL+i] = byteArray[i - start];
+    }
   }
   
   public void setChecksum (int checksum) {
     byte[] byteArray = BigInteger.valueOf(checksum).toByteArray();
-    this.checksum = byteArray;
-    data[12] = this.checksum[0];
-    data[13] = this.checksum[1];
-    
+    int start = this.checksum.length - byteArray.length;
+    for (int i = start; i< 2 && i< this.checksum.length; i++) {
+      data[FNL+SNL+ANL+WSL+i] = byteArray[i - start];
+    }
   }
   
   public void setContent (byte[] content) {
-    for (int i = 0; i < content.length; i++) {
-      data[16+i] = content[i];
+    int start = contentLength - content.length;
+    for (int i = start; i < content.length; i++) {
+      data[FNL+SNL+ANL+WSL+CSL+FL+i] = content[i - start];
     }
   }
   
@@ -201,12 +232,12 @@ public class Packet {
     this.flagsToByte();   
     
     // make the datagram packet
-    DatagramPacket packet = new DatagramPacket(data, data.length, socket.getInetAddress(), socket.getPort());
+    DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
     
     return packet;
   }
   
-  private void flagsToByte() {
+  public void flagsToByte() {
     byte [] flags = new byte[2];
     flags[0] = (byte) (syn | ack | fin | afl);
     flags[1] = (byte) (dfl | pfl | down | up | pau | res | stat | exit);
@@ -218,77 +249,83 @@ public class Packet {
   
   //--------------------------- Read flags ---------------------------------------
   
-  public boolean hasSyn() {
+  public boolean hasSynchronizeFlag() {
     return (data[14] & SYN) == SYN;
   }
-  public boolean hasAck() {
+  public boolean hasAcknowledgementFlag() {
     return (data[14] & ACK) == ACK;
   }
-  public boolean hasFin() {
+  public boolean hasFinalFlag() {
     return (data[14] & FIN) == FIN;
   }
-  public boolean hasAfl() {
+  public boolean hasAvailableFilesListFlag() {
     return (data[14] & AFL) == AFL;
   }
   
-  public boolean hasDfl() {
+  public boolean hasDownloadingFilesListFlag() {
     return (data[15] & DFL) == DFL;
   }
-  public boolean hasPfl() {
+  public boolean hasPausedFilesListFlag() {
     return (data[15] & PFL) == PFL;
   }
-  public boolean hasDown() {
+  public boolean hasDownloadingFlag() {
     return (data[15] & DOWN) == DOWN;
   }
-  public boolean hasUp() {
+  public boolean hasUploadingFLag() {
     return (data[15] & UP) == UP;
   }
-  public boolean hasPau() {
+  public boolean hasPauseFlag() {
     return (data[15] & PAU) == PAU;
   }
-  public boolean hasRes() {
+  public boolean hasResumeFlag() {
     return (data[15] & RES) == RES;
   }
-  public boolean hasStat() {
+  public boolean hasStatisticsFlag() {
     return (data[15] & STAT) == STAT;
   }
-  public boolean hasExit() {
+  public boolean hasExitFlag() {
     return (data[15] & EXIT) == EXIT;
+  }
+  
+  public boolean hasFLag (byte flag) {
+    
+    return (data[15] & flag) == flag;
   }
   
   //--------------------------- Read header parts ---------------------------------------
   
-  public String getFilename() {
-    filename[0] = data[0];
-    filename[1] = data[1];
-     return Arrays.toString(filename);   
+  public int getFileNumber() {
+    for (int i = 0; i<fileNumber.length; i++) {
+      fileNumber[i] = data[i];
+    }
+     return new BigInteger(fileNumber).intValue();  
   }
   
   public int getSeqNumber() {
-    seqNumber[0] = data[2];
-    seqNumber[1] = data[3];
-    seqNumber[2] = data[4];
-    seqNumber[3] = data[5];
+    for (int i = 0; i<seqNumber.length; i++) {
+      seqNumber[i] = data[2+i];
+    }
      return new BigInteger(seqNumber).intValue();
   }
   
   public int getAckNumber() {
-    ackNumber[0] = data[6];
-    ackNumber[1] = data[7];
-    ackNumber[2] = data[8];
-    ackNumber[3] = data[9];
+    for (int i = 0; i<ackNumber.length; i++) {
+      ackNumber[i] = data[6+i];
+    }
      return new BigInteger(ackNumber).intValue();
   }
   
   public int getWindowSize() {
-    windowSize[0] = data[10];
-    windowSize[1] = data[11];
+    for (int i = 0; i<windowSize.length; i++) {
+      windowSize[i] = data[10+i];
+    }
      return new BigInteger(windowSize).intValue();   
   }
   
   public int getChecksum() {
-    checksum[0] = data[12];
-    checksum[1] = data[13];
+    for (int i = 0; i<checksum.length; i++) {
+      checksum[i] = data[12+i];
+    }
      return new BigInteger(checksum).intValue();   
   }
   
@@ -298,5 +335,11 @@ public class Packet {
       content[i] = data[16+i];
     }
      return content;   
+  }
+  
+  // Checksum
+  public int calculateChecksum() {
+    // TODO
+    return 0;
   }
 }

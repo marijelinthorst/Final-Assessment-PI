@@ -8,7 +8,11 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Scanner;
 
-public class ClientMain {
+//import com.nedap.university.packets.Packet;
+import com.nedap.university.packets.PacketDealer;
+import com.nedap.university.packets.SendQueue;
+
+public class Client {
 
 
   // booleans which determine status of client
@@ -24,8 +28,8 @@ public class ClientMain {
   
   // Packet info
   private int packetlength = 512;
-  private Packet maker;
-  private PackageReader reader;
+  //private Packet maker;
+  private PacketDealer dealer;
   private SendQueue queue;
 
   /** main */
@@ -45,7 +49,7 @@ public class ClientMain {
       e.printStackTrace();
     }
     
-    String broadcastMessage = "SYN"; // TODO: misschien eigen header hier
+    String broadcastMessage = "SYN";
     byte[] broadcast = broadcastMessage.getBytes();
     DatagramPacket broadcastPacket = new DatagramPacket(broadcast, broadcast.length, broadcastIP, serverPort);
     byte[] responseBuffer = new byte[512];
@@ -80,7 +84,7 @@ public class ClientMain {
     }
     
     // construct new client object and start the user and server input threads
-    ClientMain client = new ClientMain();
+    Client client = new Client();
     System.out.println("Client constructed");
     client.startUserInput();
     client.startServerInput();
@@ -89,10 +93,10 @@ public class ClientMain {
   /**
    * constructor
    */
-  public ClientMain() {
+  public Client() {
     userIn = new Scanner(System.in);
-    maker = new Packet(socket);
-    reader = new PackageReader();
+    //maker = new Packet(socket);
+    dealer = new PacketDealer();
     queue = new SendQueue(socket);
     queue.start();
   }
@@ -198,7 +202,7 @@ public class ClientMain {
         byte[] buffer = new byte[packetlength];
         DatagramPacket receivePacket = new DatagramPacket(buffer, buffer.length);
         socket.receive(receivePacket);
-        reader.readPackage(receivePacket);
+        dealer.readPackage(receivePacket);
       } catch (IOException e) {
         System.out.println("Sorry, cannot reach server");
         this.shutdown();
