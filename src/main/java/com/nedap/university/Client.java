@@ -8,9 +8,7 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Scanner;
 
-//import com.nedap.university.packets.Packet;
 import com.nedap.university.packets.PacketDealer;
-import com.nedap.university.packets.SendQueue;
 
 public class Client {
 
@@ -28,9 +26,7 @@ public class Client {
   
   // Packet info
   private int packetlength = 512;
-  //private Packet maker;
   private PacketDealer dealer;
-  private SendQueue queue;
 
   /** main */
   public static void main(String[] args) {
@@ -95,10 +91,7 @@ public class Client {
    */
   public Client() {
     userIn = new Scanner(System.in);
-    //maker = new Packet(socket);
-    dealer = new PacketDealer();
-    queue = new SendQueue(socket);
-    queue.start();
+    dealer = new PacketDealer(socket, serverAddress, serverPort);
   }
 
 
@@ -146,13 +139,15 @@ public class Client {
   public void showPrompt() {
     // TODO determine intuitive TUI
     System.out.println("What do you want to do:");
-    System.out.println("1. Upload file to the server");
-    System.out.println("2. See a list of files the server has available for downloading");
-    System.out.println("3. See a list of files currently being downloaded and/or uploaded");
-    System.out.println("4. See a list of files currently paused");
-    System.out.println("5. See uploading/downloading statistics");
-    System.out.println("6. Select a file to download, pause or resume downloading");
-    System.out.println("7. Exit");
+    System.out.println("1. See a list of files the server has available for downloading");
+    System.out.println("2. Download a file from the server");
+    System.out.println("3. See uploading/downloading statistics");
+    System.out.println("4. Pause a file");
+    System.out.println("5. Resume a file");
+    System.out.println("6. See a list of files currently being downloaded");
+    System.out.println("7. See a list of files currently paused"); 
+    System.out.println("8. Upload file to the server");
+    System.out.println("9. Exit");
     System.out.println("Please enter the number of the action you wish to do");
   }
 
@@ -160,30 +155,49 @@ public class Client {
     switch (input) {
       case "1":
         System.out.println("1");
+        dealer.queryAvailableFilesList();
         break;
       case "2":
         System.out.println("2");
+        // TODO select a file
+        dealer.downloadFile();
         break;
       case "3":
         System.out.println("3");
+        dealer.queryStatistics();
         break;
       case "4":
         System.out.println("4");
+        // TODO select a file
+        dealer.pauseFile();
         break;
       case "5":
         System.out.println("5");
+        // TODO select a file
+        dealer.resumeFile();
         break;
       case "6":
         System.out.println("6");
+        dealer.queryDownloadingFilesList();
         break;
       case "7":
         System.out.println("7");
+        dealer.queryPausedFilesList();
+        break;
+      case "8":
+        System.out.println("8");
+        // TODO select a file
+        dealer.uploadFile();
+        break;
+      case "9":
+        System.out.println("9");
+        // TODO sluit zelf ook af
+        dealer.exitServer();
         break;
       default:
         System.out.println("That number is not  a valid choice!");
         break;
     }
-    // TODO add actions for each case
   }
 
   // ---------------- server input ---------------------
@@ -202,6 +216,7 @@ public class Client {
         byte[] buffer = new byte[packetlength];
         DatagramPacket receivePacket = new DatagramPacket(buffer, buffer.length);
         socket.receive(receivePacket);
+        // TODO cannot receive until packet is read. Change this?
         dealer.readPackage(receivePacket);
       } catch (IOException e) {
         System.out.println("Sorry, cannot reach server");
