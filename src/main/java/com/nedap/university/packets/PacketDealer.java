@@ -8,6 +8,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.file.Files;
+import java.util.Arrays;
 
 public class PacketDealer {
   /**
@@ -46,8 +47,7 @@ public class PacketDealer {
    * - remove files
    */
   
-  //Path of a file 
-  static final String FILEPATH = ""; 
+  
   
   private InetAddress address;
   private int port;
@@ -61,15 +61,12 @@ public class PacketDealer {
     this.port = port;
     sendQueue = new SendQueue(socket);
     sendQueue.start();
-    // TODO
-    // alle andere flaggen niet gezet..
-    // new File(FILEPATH + "");
   }
   
   public void readPackage(DatagramPacket dataPacket) {
     System.out.println("Received a packet:");
     Packet packet = new Packet (dataPacket);    
-    if (packet.getChecksum() == packet.calculateChecksum()) {
+    if (Arrays.equals(packet.getChecksum(), packet.calculateChecksum())) {
       System.out.println("  Checksum correct");
       this.checkFlags(packet);
     } else {
@@ -117,13 +114,14 @@ public class PacketDealer {
     }  
   }
   private void packetIncorrect() {
-    System.out.println("Packet checksum or flags incorrect");
+    System.out.println("  Packet checksum or flags incorrect");
     // TODO Pakket onleesbaar, stuur laatste pakketje opnieuw? Of ack?
   }
 
   private void availableFilesListPacketDealer (Packet packet) {
     Packet returnPacket = new Packet(address, port);
     if (packet.hasSynchronizeFlag() && packet.hasAcknowledgementFlag()) {
+      // do something with content
       returnPacket.setAvailableFilesListFlag();
       returnPacket.setAcknowlegdementFlag();
       DatagramPacket returnDataPacket = returnPacket.makePacket();
@@ -316,37 +314,7 @@ public class PacketDealer {
         !packet.hasStatisticsFlag();
   }
   
-  
-  // -------------------------- file writer / reader ----------------------------
-  // Method which write the bytes into a file 
-  public void writeByteToFile(byte[] bytes, File file) { 
-    try { 
-      // Initialize a pointer in file using OutputStream 
-      OutputStream os = new FileOutputStream(file); 
-
-      // Starts writing the bytes in it 
-      os.write(bytes); 
-      System.out.println("Successfully byte inserted"); 
-
-      // Close the file 
-      os.close(); 
-      } catch (Exception e) { 
-        System.out.println("Exception: " + e); 
-      } 
-  }
-  
-  public byte[] readFileToByte (File file) {
-    byte[] fileContent = null;
-    try {
-      fileContent = Files.readAllBytes(file.toPath());
-    } catch (IOException e) {
-      System.out.println("Exception: " + e);
-      e.printStackTrace();
-    }
-    return fileContent;
-  }
-  
-  // ------------------------ send methods for client ----------------
+  // ------------------------ methods for client ----------------
   
   public void queryAvailableFilesList() {
     Packet packet = new Packet(address, port);
@@ -411,4 +379,5 @@ public class PacketDealer {
     packet.setExitFlag();
     sendQueue.addToQueue(packet.makePacket());
   }
+  
 }

@@ -3,6 +3,7 @@ package com.nedap.university.packets;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
@@ -51,6 +52,14 @@ public class SendQueue extends Thread {
     // get timeout van packet
     // stop timeout of 
     // boolean stop van timeout = true;
+  }
+  
+  public InetAddress getAddress() {
+    return socket.getInetAddress();
+  }
+  
+  public int getPort() {
+    return socket.getPort();
   }
 
 }
