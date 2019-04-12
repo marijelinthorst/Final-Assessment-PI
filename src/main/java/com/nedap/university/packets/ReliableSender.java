@@ -1,35 +1,39 @@
 package com.nedap.university.packets;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.DatagramPacket;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.zip.CRC32;
 
 public class ReliableSender extends Thread {
   private File file;
+  private String filename;
   private int filenumber;
   private DatagramPacket packet;
   private List<?> list;
   private boolean isFinished;
   private SendQueue sendQueue;
   
-  // Sliding window sender
+  // Sliding window sender variables
   private final static int SENDWINDOWSIZE = 10;
   private int firstFrameSeqNumber;
   private int lastAcknowledgeReceived;
   private int lastFrameSend;
   private int contentLength = 494;
+  
+  //TODO Path of a file 
+  static final String FILEPATH = ""; 
 
   /**
    *  constructors for each type of command
    */
-  public ReliableSender(File file, SendQueue sendQueue, int filenumber) {
-    this.file = file;
+  public ReliableSender(String filename, SendQueue sendQueue, int filenumber) {
+    this.filename = filename;
     this.filenumber = filenumber;
     this.sendQueue = sendQueue;
   }
@@ -45,7 +49,7 @@ public class ReliableSender extends Thread {
    *  run: directs to specific run
    */
   public void run() {
-    if (file != null) {
+    if (filename != null) {
       this.runFileReliableTransfer();
     } else if (packet != null) {
       this.runPacketReliableTransfer();
@@ -58,7 +62,7 @@ public class ReliableSender extends Thread {
   }
 
   public void runFileReliableTransfer() {
-    byte[] fileBytes = this.readFileToByte(file);
+    byte[] fileBytes = this.readFileToByte(filename);
     
     // make random starting sequence number
     Random random = new Random(); 
@@ -107,34 +111,51 @@ public class ReliableSender extends Thread {
     
   }
   
-  //-------------------------- file writer / reader ----------------------------
-  // Method which write bytes into a file 
-  public void writeByteToFile(byte[] bytes, File file) { 
-    try { 
-      // Initialize a pointer in file using OutputStream 
-      OutputStream os = new FileOutputStream(file); 
-
-      // Starts writing the bytes in it 
-      os.write(bytes); 
-      System.out.println("Successfully byte inserted"); 
-
-      // Close the file 
-      os.close(); 
-    } catch (Exception e) { 
-      System.out.println("Exception: " + e); 
-    } 
- }
- 
-  //Method which write a file into bytes 
-  public byte[] readFileToByte (File file) {
-    byte[] fileContent = null;
+  //-------------------------- file reader ----------------------------
+  private byte[] readFileToByte (String filename) {
+    // filename and length to byte[]
+    byte[] filenameBytes = filename.getBytes();
+    int filenameLength = filenameBytes.length;
+    byte[] filenameLengthBytes = ByteBuffer.allocate(4).putInt(filenameLength).array();
+    
+    // write file content and length to byte[]
+    this.file = new File(FILEPATH + filename);
+    byte[] fileBytes = null;
     try {
-      fileContent = Files.readAllBytes(file.toPath());
+      fileBytes = Files.readAllBytes(file.toPath());
     } catch (IOException e) {
       System.out.println("Exception: " + e);
       e.printStackTrace();
     }
-    return fileContent;
+    int fileLength = fileBytes.length;
+    byte[] fileLengthBytes = ByteBuffer.allocate(4).putInt(fileLength).array();
+    
+    // calculate checksum and put into 4 bytes
+    // dataWithoutChecksum = filenameLengthBytes + filenameBytes + fileLengthBytes + fileBytes
+    byte[] dataWithoutChecksum = new byte[filenameLengthBytes.length + filenameBytes.length + fileLengthBytes.length + fileBytes.length];
+    System.arraycopy(filenameLengthBytes, 0, dataWithoutChecksum, 0, filenameLengthBytes.length); 
+    System.arraycopy(filenameBytes, 0, dataWithoutChecksum, filenameLengthBytes.length, filenameBytes.length); 
+    System.arraycopy(fileLengthBytes, 0, dataWithoutChecksum, filenameLengthBytes.length + filenameBytes.length, fileLengthBytes.length);
+    System.arraycopy(fileBytes, 0, dataWithoutChecksum, filenameLengthBytes.length + filenameBytes.length + fileLengthBytes.length, filenameBytes.length);
+    
+    CRC32 crc = new CRC32();
+    crc.update(dataWithoutChecksum);
+    long longChecksum = crc.getValue();
+    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+    buffer.putLong(longChecksum);
+    byte[] tooLong =  buffer.array();
+    byte[] checksumBytes = new byte[4];
+    System.arraycopy(tooLong,4,checksumBytes,0,checksumBytes.length);
+    
+    // bytesToSend = filenameLengthBytes + filenameBytes + checksumBytes + fileLengthBytes + fileBytes
+    byte [] bytesToSend = new byte[filenameLengthBytes.length + filenameBytes.length + checksumBytes.length + fileLengthBytes.length + fileBytes.length]; 
+    System.arraycopy(filenameLengthBytes, 0, bytesToSend, 0, filenameLengthBytes.length); 
+    System.arraycopy(filenameBytes, 0, bytesToSend, filenameLengthBytes.length, filenameBytes.length);
+    System.arraycopy(checksumBytes, 0, bytesToSend, filenameLengthBytes.length + filenameBytes.length, checksumBytes.length); 
+    System.arraycopy(fileLengthBytes, 0, bytesToSend, filenameLengthBytes.length + filenameBytes.length + checksumBytes.length, fileLengthBytes.length);
+    System.arraycopy(fileBytes, 0, bytesToSend, filenameLengthBytes.length + filenameBytes.length + checksumBytes.length + fileLengthBytes.length, filenameBytes.length);
+    
+    return bytesToSend;
   }
   
   //-------------------------------------------------------------------------------
@@ -152,7 +173,7 @@ public class ReliableSender extends Thread {
   }
   
   //-------------------------------------------------------------------------------
-  public short returnFilenumber() {
+  public int returnFilenumber() {
     return filenumber;
   }
 }
