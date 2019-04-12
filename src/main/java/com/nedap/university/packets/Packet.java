@@ -3,6 +3,9 @@ package com.nedap.university.packets;
 import java.math.BigInteger;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.zip.CRC32;
 
 public class Packet {
 
@@ -52,7 +55,7 @@ public class Packet {
   final static int SNL = 4;
   final static int ANL = 4;
   final static int WSL = 2;
-  final static int CSL = 2;
+  final static int CSL = 4;
   final static int FL = 2;
   static int contentLength;
   
@@ -93,7 +96,8 @@ public class Packet {
   final static byte STAT = 2;
   final static byte EXIT = 1;
   
-  
+  int flagFirst = FNL + SNL + ANL + WSL + CSL;
+  int flagSecond = flagFirst + 1;
   
   /**
    * constructors
@@ -210,6 +214,7 @@ public class Packet {
     }
   }
   
+  // TODO niet nodig?
   public void setChecksum (int checksum) {
     byte[] byteArray = BigInteger.valueOf(checksum).toByteArray();
     int start = this.checksum.length - byteArray.length;
@@ -229,7 +234,14 @@ public class Packet {
   // --------------- Make packet ---------------------------------
   public DatagramPacket makePacket() {
     // set flags
-    this.flagsToByte();   
+    this.flagsToByte();
+    
+    // add checksum
+    byte[] checksum = this.calculateChecksum();
+    data[12] = checksum[0];
+    data[13] = checksum[1];
+    data[14] = checksum[2];
+    data[15] = checksum[3];
     
     // make the datagram packet
     DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
@@ -242,54 +254,53 @@ public class Packet {
     flags[0] = (byte) (syn | ack | fin | afl);
     flags[1] = (byte) (dfl | pfl | down | up | pau | res | stat | exit);
     
-    data[14] = flags[0];
-    data[15] = flags[1];
+    data[flagFirst] = flags[0];
+    data[flagSecond] = flags[1];
   }
    
   
   //--------------------------- Read flags ---------------------------------------
   
   public boolean hasSynchronizeFlag() {
-    return (data[14] & SYN) == SYN;
+    return (data[flagFirst] & SYN) == SYN;
   }
   public boolean hasAcknowledgementFlag() {
-    return (data[14] & ACK) == ACK;
+    return (data[flagFirst] & ACK) == ACK;
   }
   public boolean hasFinalFlag() {
-    return (data[14] & FIN) == FIN;
+    return (data[flagFirst] & FIN) == FIN;
   }
   public boolean hasAvailableFilesListFlag() {
-    return (data[14] & AFL) == AFL;
+    return (data[flagFirst] & AFL) == AFL;
   }
   
   public boolean hasDownloadingFilesListFlag() {
-    return (data[15] & DFL) == DFL;
+    return (data[flagSecond] & DFL) == DFL;
   }
   public boolean hasPausedFilesListFlag() {
-    return (data[15] & PFL) == PFL;
+    return (data[flagSecond] & PFL) == PFL;
   }
   public boolean hasDownloadingFlag() {
-    return (data[15] & DOWN) == DOWN;
+    return (data[flagSecond] & DOWN) == DOWN;
   }
   public boolean hasUploadingFLag() {
-    return (data[15] & UP) == UP;
+    return (data[flagSecond] & UP) == UP;
   }
   public boolean hasPauseFlag() {
-    return (data[15] & PAU) == PAU;
+    return (data[flagSecond] & PAU) == PAU;
   }
   public boolean hasResumeFlag() {
-    return (data[15] & RES) == RES;
+    return (data[flagSecond] & RES) == RES;
   }
   public boolean hasStatisticsFlag() {
-    return (data[15] & STAT) == STAT;
+    return (data[flagSecond] & STAT) == STAT;
   }
   public boolean hasExitFlag() {
-    return (data[15] & EXIT) == EXIT;
+    return (data[flagSecond] & EXIT) == EXIT;
   }
   
-  public boolean hasFLag (byte flag) {
-    
-    return (data[15] & flag) == flag;
+  public boolean hasFLag (byte flag) { 
+    return (data[flagSecond] & flag) == flag;
   }
   
   //--------------------------- Read header parts ---------------------------------------
@@ -303,43 +314,62 @@ public class Packet {
   
   public int getSeqNumber() {
     for (int i = 0; i<seqNumber.length; i++) {
-      seqNumber[i] = data[2+i];
+      seqNumber[i] = data[FNL+i];
     }
      return new BigInteger(seqNumber).intValue();
   }
   
   public int getAckNumber() {
     for (int i = 0; i<ackNumber.length; i++) {
-      ackNumber[i] = data[6+i];
+      ackNumber[i] = data[FNL+SNL+i];
     }
      return new BigInteger(ackNumber).intValue();
   }
   
   public int getWindowSize() {
     for (int i = 0; i<windowSize.length; i++) {
-      windowSize[i] = data[10+i];
+      windowSize[i] = data[FNL+SNL+ANL+i];
     }
      return new BigInteger(windowSize).intValue();   
   }
   
-  public int getChecksum() {
+  public byte[] getChecksum() {
     for (int i = 0; i<checksum.length; i++) {
-      checksum[i] = data[12+i];
+      checksum[i] = data[FNL+SNL+ANL+WSL+i];
     }
-     return new BigInteger(checksum).intValue();   
+     return checksum;   
   }
   
   public byte[] getContent() {
-    byte [] content = new byte[496];
+    byte [] content = new byte[contentLength];
     for (int i = 0; i < content.length; i++) {
-      content[i] = data[16+i];
+      content[i] = data[FNL+SNL+ANL+WSL+CSL+FL+i];
     }
      return content;   
   }
   
   // Checksum
-  public int calculateChecksum() {
-    // TODO
-    return 0;
+  public byte[] calculateChecksum() {
+    // calculate checksum of:
+    byte[] dataUntilChecksum = Arrays.copyOfRange(data, 0, FNL+SNL+ANL+WSL);
+    byte[] dataAfterChecksum = Arrays.copyOfRange(data, FNL+SNL+ANL+WSL+CSL, PACKETLENGTH);
+    
+    byte[] dataWithoutChecksum = new byte[PACKETLENGTH - CSL];
+    System.arraycopy(dataUntilChecksum, 0, dataWithoutChecksum, 0, dataUntilChecksum.length); 
+    System.arraycopy(dataAfterChecksum, 0, dataWithoutChecksum, dataUntilChecksum.length, dataAfterChecksum.length);
+    
+    // calculate checksum
+    CRC32 crc = new CRC32();
+    crc.update(dataWithoutChecksum);
+    long checksum = crc.getValue();
+    
+    // from long to byte[2]
+    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+    buffer.putLong(checksum);
+    byte[] tooLong =  buffer.array();
+    byte[] correct = new byte[4];
+    System.arraycopy(tooLong,4,correct,0,correct.length);
+    
+    return correct;
   }
 }
