@@ -5,6 +5,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.Scanner;
 
@@ -36,7 +37,7 @@ public class Client {
     try {
       socket = new DatagramSocket(clientPort);
       socket.setBroadcast(true);
-      broadcastIP = InetAddress.getByName("localhost");
+      broadcastIP = InetAddress.getByName("255.255.255.255");
     } catch (SocketException e) {
       System.out.println("ERROR: couldn't construct a DatagramSocket object!");
       e.printStackTrace();
@@ -51,19 +52,28 @@ public class Client {
     byte[] responseBuffer = new byte[512];
     DatagramPacket responsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
     System.out.println("Client made broadcast message");
+    boolean sending = true;
     
     // send broadcast message and receive response from the server
-    try {
-      socket.send(broadcastPacket);
-      System.out.println("Client send broadcast message");
-      socket.receive(responsePacket);
-      System.out.println("Client received message");
-    } catch (IOException e) {
-      System.out.println("ERROR: couldn't send or receive broadcast message!");
-      e.printStackTrace();
+    while (sending) {
+      try {
+        socket.send(broadcastPacket);
+        System.out.println("Client send broadcast message");
+        socket.setSoTimeout(1000); // set timeout
+        socket.receive(responsePacket);
+        socket.setSoTimeout(0); // cancel timeout
+        sending = false;
+      } catch (SocketTimeoutException e) {
+        //just continue the loop
+      } catch (IOException e) {
+        System.out.println("ERROR: couldn't send or receive broadcast message!");
+        e.printStackTrace();
+      }
     }
     
+    
     // get info from response packet from the server
+    System.out.println("Client received message");
     serverAddress = responsePacket.getAddress();
     serverPort = responsePacket.getPort(); 
       
@@ -219,6 +229,7 @@ public class Client {
         // TODO cannot receive until packet is read. Change this?
         dealer.readPackage(receivePacket);
       } catch (IOException e) {
+        System.out.println(e);
         System.out.println("Sorry, cannot reach server");
         this.shutdown();
       }

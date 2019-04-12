@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 
 import com.nedap.university.packets.PacketDealer;
 
@@ -34,7 +35,7 @@ public class Server {
       socket.receive(bufferPacket);
       System.out.println("Server received broadcast");
     } catch (IOException e) {
-      System.out.println("ERROR: couldn't send or receive broadcast message!");
+      System.out.println("ERROR: couldn't receive broadcast message!");
       e.printStackTrace();
     }
     
@@ -46,18 +47,30 @@ public class Server {
     String responseMessage = "SYN + ACK";
     byte[] response = responseMessage.getBytes();
     DatagramPacket responsePacket = new DatagramPacket(response, response.length, clientAddress, clientPort);
-    try {
-      socket.send(responsePacket);
-      System.out.println("Server send syn+ack");
-      socket.receive(bufferPacket);
-      System.out.println("Server received message");  
-      Server server = new Server();
-      System.out.println("Server constructed");
-      server.startClientInputLoop();
-    } catch (IOException e) {
-      System.out.println("ERROR: couldn't send SYN + ACK message!");
-      e.printStackTrace();
+    boolean sending = true;
+    
+    while (sending) {
+      try {
+        socket.send(responsePacket);
+        System.out.println("Server send syn+ack");
+        
+        socket.setSoTimeout(1000); // set timeout
+        socket.receive(bufferPacket);
+        socket.setSoTimeout(0); // cancel timeout
+        sending = false;
+      } catch (SocketTimeoutException e) {
+        //just continue the loop
+      } catch (IOException e) {
+        System.out.println("ERROR: couldn't send SYN + ACK message!");
+        e.printStackTrace();
+      }
     }
+    
+    // construct new server object and start the client input loop
+    System.out.println("Server received message");  
+    Server server = new Server();
+    System.out.println("Server constructed");
+    server.startClientInputLoop();
   }
   
   /**
