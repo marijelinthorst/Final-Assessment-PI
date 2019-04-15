@@ -134,8 +134,8 @@ class PacketTest {
   @Test
   void testFileName() {
     assertEquals(packet.getFileNumber(), 0);
-    packet.setFileNumber(5);
-    assertEquals(packet.getFileNumber(), 5);
+    packet.setFileNumber((short) 5);
+    assertEquals(packet.getFileNumber(), (short) 5);
   }
 
   @Test
@@ -162,14 +162,14 @@ class PacketTest {
 
   @Test
   void testChecksum() {
-    assertEquals(packet.getChecksum(), 0);
+    Arrays.equals(packet.getChecksum(), new byte[4]);
     packet.setChecksum(101);
-    assertEquals(packet.getChecksum(), 101);
+    Arrays.equals(packet.getChecksum(), packet.calculateChecksum());
     }
 
   @Test
   void testContent() {
-    Arrays.equals(packet.getContent(), new byte[496]);
+    Arrays.equals(packet.getContent(), new byte[494]);
     byte[] content = new String("hello").getBytes();
     packet.setContent(content);
     Arrays.equals(packet.getContent(), new String("hello").getBytes());
@@ -190,6 +190,6 @@ class PacketTest {
     assertTrue(newPacket.hasExitFlag());
     assertTrue(newPacket.hasSynchronizeFlag());
     assertEquals(newPacket.getSeqNumber(), 9234);
-    assertEquals(newPacket.getChecksum(), 101);
+    Arrays.equals(newPacket.getChecksum(), newPacket.calculateChecksum());
   }
 }

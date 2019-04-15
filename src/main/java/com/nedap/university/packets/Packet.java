@@ -112,7 +112,7 @@ public class Packet {
     this.ackNumber = new byte[ANL];
     this.windowSize = new byte[WSL];
     this.checksum = new byte[CSL];
-    contentLength = PACKETLENGTH - FNL - SNL - ANL - WSL - CSL;
+    contentLength = PACKETLENGTH - FNL - SNL - ANL - WSL - CSL - FL;
     this.content = new byte[contentLength];
   }
   
@@ -126,7 +126,7 @@ public class Packet {
     this.ackNumber = new byte[ANL];
     this.windowSize = new byte[WSL];
     this.checksum = new byte[CSL];
-    contentLength = PACKETLENGTH - FNL - SNL - ANL - WSL - CSL;
+    contentLength = PACKETLENGTH - FNL - SNL - ANL - WSL - CSL - FL;
     this.content = new byte[contentLength];
   }
   
@@ -182,8 +182,11 @@ public class Packet {
   
   //------------------------ Set header parts ---------------------------------
   
-  public void setFileNumber (int fileNumber) {
-    byte[] byteArray = BigInteger.valueOf(fileNumber).toByteArray();
+  public void setFileNumber (short fileNumber) {
+    ByteBuffer buffer = ByteBuffer.allocate(2);
+    buffer.putShort(fileNumber);
+    byte[] byteArray = buffer.array();
+    //byte[] byteArray = BigInteger.valueOf(fileNumber).toByteArray();
     int start = this.fileNumber.length - byteArray.length;
     for (int i = start; i< this.fileNumber.length; i++) {
       data[i] = byteArray[i - start];
@@ -305,11 +308,15 @@ public class Packet {
   
   //--------------------------- Read header parts ---------------------------------------
   
-  public int getFileNumber() {
+  public short getFileNumber() {
     for (int i = 0; i<fileNumber.length; i++) {
       fileNumber[i] = data[i];
     }
-     return new BigInteger(fileNumber).intValue();  
+    ByteBuffer byteBuffer = ByteBuffer.allocate(2);
+    byteBuffer.put(fileNumber[0]);
+    byteBuffer.put(fileNumber[1]);
+    
+     return byteBuffer.getShort(0); 
   }
   
   public int getSeqNumber() {
@@ -363,7 +370,7 @@ public class Packet {
     crc.update(dataWithoutChecksum);
     long checksum = crc.getValue();
     
-    // from long to byte[2]
+    // from long to 4 bytes
     ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
     buffer.putLong(checksum);
     byte[] tooLong =  buffer.array();
