@@ -13,11 +13,12 @@ import java.util.zip.CRC32;
 public class ReliableSender extends Thread {
   private File file;
   private String filename;
-  private int filenumber;
+  private short filenumber = 0;
   private DatagramPacket packet;
   private List<?> list;
   private boolean isFinished;
   private SendQueue sendQueue;
+  private boolean downloading;
   
   // Sliding window sender variables
   private final static int SENDWINDOWSIZE = 10;
@@ -32,10 +33,11 @@ public class ReliableSender extends Thread {
   /**
    *  constructors for each type of command
    */
-  public ReliableSender(String filename, SendQueue sendQueue, int filenumber) {
+  public ReliableSender(String filename, SendQueue sendQueue, short filenumber, boolean downloading) {
     this.filename = filename;
     this.filenumber = filenumber;
     this.sendQueue = sendQueue;
+    this.downloading = downloading;
   }
   // what type does pi give?
   public ReliableSender(List<?> list, SendQueue sendQueue) {
@@ -56,12 +58,12 @@ public class ReliableSender extends Thread {
     } else if (list != null) {
       this.runListReliableTransfer();
     } else {
-      // receive file or list?
       System.out.println("What?");
     }
   }
 
   public void runFileReliableTransfer() {
+    // get bytes to send
     byte[] fileBytes = this.readFileToByte(filename);
     
     // make random starting sequence number
@@ -69,46 +71,59 @@ public class ReliableSender extends Thread {
     firstFrameSeqNumber = random.nextInt();
     lastFrameSend = firstFrameSeqNumber - 1;
     
-    // calculate window, stop when fin is reached
-    // start sending window
-    // window empty --> isFinished = true;
-    while (!isFinished) {
-      
-    }
-    
     int i = 0;
     int totalNoOfPackets = fileBytes.length/contentLength;
     
-    
-    
-    
-    while (i <= totalNoOfPackets) {
-      if (i == 0) {
-        Packet packet = new Packet(sendQueue.getAddress(), sendQueue.getPort());
+    // start loop
+    while (i <= totalNoOfPackets) { // since sendQueue takes care of retransmissions, if last packet is send then loop can stop
+      // initialise packet with all flags in common
+      Packet packet = new Packet(sendQueue.getAddress(), sendQueue.getPort());
+      packet.setFileNumber(filenumber);
+      packet.setSeqNumber(lastFrameSend + 1);
+      if (downloading) {
         packet.setDownloadingFlag();
+      } else {
+        packet.setUploadingFlag();
+      }
+      
+      // sliding window, start with sending syn + ack and no content
+      if (i == 0) { // start
         packet.setSynchronizeFlag();
         packet.setAcknowlegdementFlag();
-        packet.setFileNumber(filenumber);
-        packet.setSeqNumber(lastFrameSend + 1);
-        sendQueue.addToQueue(packet.makePacket());
+        sendQueue.addToQueue(packet.makePacket(), lastFrameSend + 1);
+        
+        System.out.println("SENDING PACKET NUMBER: " + i);
+        lastFrameSend++;
         i++;
-      } else if (lastFrameSend + 1 - lastAcknowledgeReceived < SENDWINDOWSIZE) {
-        Packet packet = new Packet(sendQueue.getAddress(), sendQueue.getPort());
-        packet.setDownloadingFlag();
+      } else if (lastFrameSend + 1 - this.getLAR() < SENDWINDOWSIZE) { // it is in the window
         if (i == totalNoOfPackets) {
           packet.setFinalFlag();
         }
-        packet.setFileNumber(filenumber);
-        packet.setSeqNumber(lastFrameSend + 1);
-        byte[] content = Arrays.copyOfRange(fileBytes, i-1, i-1+contentLength);
+        byte[] content = Arrays.copyOfRange(fileBytes, (i-1)*contentLength, i*contentLength-1);
         packet.setContent(content);
-        sendQueue.addToQueue(packet.makePacket());
-      } else {
+        sendQueue.addToQueue(packet.makePacket(), lastFrameSend + 1);
         
+        System.out.println("SENDING PACKET NUMBER: " + i + " SEQ NO: " + (lastFrameSend + 1));
+        lastFrameSend++;
+        i++;
+      } else { // all packets in window are send
+        /** TODO if computer cannot handle this loop
+        try {
+          Thread.sleep(250);
+          continue;
+        } catch (InterruptedException e) {
+        }
+        */
       }
-    }
-    
-    
+    }    
+  }
+  
+  private synchronized int getLAR () {
+    return lastAcknowledgeReceived;
+  }
+  
+  public synchronized void changeLAR (int ack) {
+    lastAcknowledgeReceived = ack; 
   }
   
   //-------------------------- file reader ----------------------------
@@ -173,7 +188,7 @@ public class ReliableSender extends Thread {
   }
   
   //-------------------------------------------------------------------------------
-  public int returnFilenumber() {
+  public short returnFilenumber() {
     return filenumber;
   }
 }
