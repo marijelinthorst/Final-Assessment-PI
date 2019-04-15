@@ -4,16 +4,20 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
+import java.util.HashMap;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class SendQueue extends Thread {
-  private int queueLength = 1000;
-  private BlockingQueue<DatagramPacket> queue;
+  private ConcurrentLinkedQueue<DatagramPacket> queue;
   private DatagramSocket socket;
+  private long delay = 5000; //time before retransmission in milliseconds 
+  private HashMap<Integer,Timer> timers;
 
   public SendQueue(DatagramSocket socket) {
-    queue = new ArrayBlockingQueue<DatagramPacket>(queueLength);
+    this.timers = new HashMap<Integer,Timer>();
+    this.queue = new ConcurrentLinkedQueue<DatagramPacket>();
     this.socket = socket;
   }
  
@@ -22,11 +26,8 @@ public class SendQueue extends Thread {
       try {
         if (!queue.isEmpty()) {
           System.out.println("Sending");
-          socket.send(queue.take());
+          socket.send(queue.remove());
         }  
-      } catch (InterruptedException e) {
-        System.out.println("ERROR: couldn't take packet from queue");
-        e.printStackTrace();
       } catch (IOException e) {
         System.out.println("ERROR: couldn't send to: " + socket.getInetAddress() + ". Port: " + socket.getPort());
         e.printStackTrace();
@@ -34,24 +35,33 @@ public class SendQueue extends Thread {
     }
   }
   
-  public void addToQueue(DatagramPacket packet) {
-    // TODO add timeout
-    // als timeout: 
-    // if (in queue) { 
-    //   new timeout
-    // } else if (boolean stop){
-    //   doe niks
-    // } else { 
-    //   retransmit queue.add(packet);
-    // }
+  public void addToQueue(DatagramPacket packet, int sequenceNumber) {
+    Timer timer = new Timer();
+    timer.schedule(this.getTask(packet, sequenceNumber), delay);
+    timers.put(sequenceNumber, timer);
     queue.add(packet);
   }
   
-  public void stopTimeout(DatagramPacket packet) {
-    // TODO
-    // get timeout van packet
-    // stop timeout of 
-    // boolean stop van timeout = true;
+  private TimerTask getTask(DatagramPacket packet, int sequenceNumber) {
+    return new TimerTask(){
+      @Override
+      public void run() { 
+        if (queue.contains(packet)) {
+          timers.remove(sequenceNumber);
+          Timer timer = new Timer();
+          timer.schedule(getTask(packet, sequenceNumber), delay);
+          timers.put(sequenceNumber, timer);
+        } else {
+          addToQueue(packet, sequenceNumber);
+        }
+      }
+    };
+  }
+  
+  public synchronized void stopTimeout(int sequenceNumber) {
+    Timer thisTimer = timers.get(sequenceNumber);
+    thisTimer.cancel();
+    timers.remove(sequenceNumber);
   }
   
   public InetAddress getAddress() {
