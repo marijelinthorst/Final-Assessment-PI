@@ -42,6 +42,10 @@ public class SendQueue extends Thread {
     queue.add(packet);
   }
   
+  public void addAcknowlegdementToQueue(DatagramPacket packet) {
+    queue.add(packet);
+  }
+  
   private TimerTask getTask(DatagramPacket packet, int sequenceNumber) {
     return new TimerTask(){
       @Override

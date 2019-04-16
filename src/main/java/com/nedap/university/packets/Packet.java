@@ -87,10 +87,10 @@ public class Packet {
   final static byte FIN = 2;
   final static byte AFL = 1;
   
-  final static byte DFL = 80;
-  final static byte PFL = 40;
-  final static byte DOWN = 20;
-  final static byte UP = 10;
+  final static byte DFL = (byte) 128;
+  final static byte PFL = 64;
+  final static byte DOWN = 32;
+  final static byte UP = 16;
   final static byte PAU = 8;
   final static byte RES = 4;
   final static byte STAT = 2;
@@ -228,7 +228,7 @@ public class Packet {
   
   public void setContent (byte[] content) {
     int start = contentLength - content.length;
-    for (int i = start; i < content.length; i++) {
+    for (int i = start; i < contentLength; i++) {
       data[FNL+SNL+ANL+WSL+CSL+FL+i] = content[i - start];
     }
   }
