@@ -4,6 +4,10 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Random;
 
 public class PacketDealer {
   /**
@@ -47,6 +51,12 @@ public class PacketDealer {
   private InetAddress address;
   private int port;
   private SendQueue sendQueue;
+  private ReliableSender sender;
+  private ReliableReceiver receiver;
+  
+  // maps with treads
+  private HashMap<Short, ReliableSender> sendingMap;
+  private HashMap<Short, ReliableReceiver> receivingMap;
   
   /**
    * Constructor
@@ -56,6 +66,8 @@ public class PacketDealer {
     this.port = port;
     sendQueue = new SendQueue(socket);
     sendQueue.start();
+    sendingMap = new HashMap<Short, ReliableSender>();
+    receivingMap = new HashMap<Short, ReliableReceiver>();
   }
   
   public void readPackage(DatagramPacket dataPacket) {
@@ -65,7 +77,7 @@ public class PacketDealer {
       System.out.println("  Checksum correct");
       this.checkFlags(packet);
     } else {
-      this.packetIncorrect();
+      this.packetIncorrect(packet);
     }
   }
   
@@ -104,150 +116,227 @@ public class PacketDealer {
       System.out.println("  EXIT packet");
       this.exitPacketDealer(packet);
     } else {
-      this.packetIncorrect();
+      this.packetIncorrect(packet);
       
     }  
   }
-  private void packetIncorrect() {
+  private void packetIncorrect(Packet packet) {
     System.out.println("  Packet checksum or flags incorrect");
-    // TODO Pakket onleesbaar, stuur laatste pakketje opnieuw? Of ack?
-  }
+    System.out.println("  SYN: " + packet.hasSynchronizeFlag());
+    System.out.println("  ACK: " + packet.hasAcknowledgementFlag());
+    System.out.println("  FIN: " + packet.hasFinalFlag());
+    System.out.println("  AFL: " + packet.hasAvailableFilesListFlag());
+    System.out.println("  DFL: " + packet.hasDownloadingFilesListFlag());
+    System.out.println("  PFL: " + packet.hasPausedFilesListFlag());
+    System.out.println("  DOWN: " + packet.hasDownloadingFlag());
+    System.out.println("  UP: " + packet.hasUploadingFLag());
+    System.out.println("  PAU: " + packet.hasPauseFlag());
+    System.out.println("  RES: " + packet.hasResumeFlag());
+    System.out.println("  STAT: " + packet.hasStatisticsFlag());
+    System.out.println("  EXIT: " + packet.hasExitFlag());
+    }
 
   private void availableFilesListPacketDealer (Packet packet) {
     Packet returnPacket = new Packet(address, port);
+    returnPacket.setAvailableFilesListFlag();
+    returnPacket.setAcknowlegdementFlag();
     if (packet.hasSynchronizeFlag() && packet.hasAcknowledgementFlag()) {
-      // do something with content
-      returnPacket.setAvailableFilesListFlag();
-      returnPacket.setAcknowlegdementFlag();
+      // read content
+      receiver = new ReliableReceiver(sendQueue, packet);
+      receiver.start();
+
+      // return acknowledgement
       DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      sendQueue.stopTimeout(packet.getSeqNumber()-1);
+      sender = new ReliableSender(returnDataPacket, sendQueue);
+      sender.start();
     } else if (packet.hasSynchronizeFlag()) {
-      returnPacket.setAvailableFilesListFlag();
       returnPacket.setSynchronizeFlag();
-      returnPacket.setAcknowlegdementFlag();
-      // TODO: add list in content
-      DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      
+      // TODO: add list 
+      List<?> list = new LinkedList<String>();
+      
+      sender = new ReliableSender(returnPacket, list, sendQueue, packet.getSeqNumber() + 1);
+      sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
-      sendQueue.stopTimeout(packet.makePacket());
+      sendQueue.stopTimeout(packet.getSeqNumber() - 1);
     } else {
-      this.packetIncorrect();
+      this.packetIncorrect(packet);
     }
   }
   
   private void downloadingPacketDealer(Packet packet) {
     // TODO Auto-generated method stub
+    short filenumber = packet.getFileNumber();
+    boolean downloading = true;
     
+    if (packet.hasSynchronizeFlag() && packet.hasAcknowledgementFlag()) {    
+      receiver = new ReliableReceiver(sendQueue, filenumber, downloading);
+      this.receivingMap.put(filenumber, receiver);
+      receiver.start();
+      receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
+    } else if (packet.hasSynchronizeFlag()) {;
+      String filename = new String(packet.getContent());
+      
+      sender = new ReliableSender(filename, sendQueue, filenumber, downloading);
+      this.sendingMap.put(filenumber, sender);
+      sender.start();
+    } else if (packet.hasAcknowledgementFlag()) {
+      sender = sendingMap.get(filenumber);
+      sender.changeLastAcknowledgeReceived(packet.getAckNumber());
+    } else {
+      receiver = receivingMap.get(filenumber);
+      receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
+    }
   }
 
   private void statisticsPacketDealer(Packet packet) {
     Packet returnPacket = new Packet(address, port);
+    returnPacket.setStatisticsFlag();
+    returnPacket.setAcknowlegdementFlag();
     if (packet.hasSynchronizeFlag() && packet.hasAcknowledgementFlag()) {
-      // TODO do something with content of packet
-      returnPacket.setStatisticsFlag();
-      returnPacket.setAcknowlegdementFlag();
+      // read content
+      receiver = new ReliableReceiver(sendQueue, packet);
+      receiver.start();
+      
+      // return acknowledgement
       DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      sendQueue.stopTimeout(packet.getSeqNumber()-1);
+      sender = new ReliableSender(returnDataPacket, sendQueue);
+      sender.start();
     } else if (packet.hasSynchronizeFlag()) {
-      returnPacket.setStatisticsFlag();
       returnPacket.setSynchronizeFlag();
-      returnPacket.setAcknowlegdementFlag();
+      
       // TODO: add statistics in content
-      DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      List<?> list = new LinkedList<String>();
+      
+      sender = new ReliableSender(returnPacket, list, sendQueue, packet.getSeqNumber() + 1);
+      sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
-      sendQueue.stopTimeout(packet.makePacket());
+      sendQueue.stopTimeout(packet.getSeqNumber() - 1);
     } else {
-      this.packetIncorrect();
+      this.packetIncorrect(packet);
     }
   }
   
   private void pausePacketDealer(Packet packet) {
     Packet returnPacket = new Packet(address, port);
     if (packet.hasAcknowledgementFlag()) {
-      sendQueue.stopTimeout(packet.makePacket());
+      sendQueue.stopTimeout(packet.getSeqNumber() - 1);
     } else {
       // TODO read filenumber and pause that file
       returnPacket.setPauseFlag();
       returnPacket.setAcknowlegdementFlag();
       DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      sender = new ReliableSender(returnDataPacket, sendQueue);
+      sender.start();
     }   
   }
 
   private void resumePacketDealer(Packet packet) {
     Packet returnPacket = new Packet(address, port);
     if (packet.hasAcknowledgementFlag()) {
-      sendQueue.stopTimeout(packet.makePacket());
+      sendQueue.stopTimeout(packet.getSeqNumber() - 1);
     } else {
       // TODO read filenumber and resume that file
       returnPacket.setResumeFlag();
       returnPacket.setAcknowlegdementFlag();
       DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      sender = new ReliableSender(returnDataPacket, sendQueue);
+      sender.start();
     }
   }
 
   private void downloadingFilesListPacketDealer(Packet packet) {
     Packet returnPacket = new Packet(address, port);
+    returnPacket.setDownloadingFilesListFlag();
+    returnPacket.setAcknowlegdementFlag();
     if (packet.hasSynchronizeFlag() && packet.hasAcknowledgementFlag()) {
-      // TODO do something with content of packet
-      returnPacket.setDownloadingFilesListFlag();
-      returnPacket.setAcknowlegdementFlag();
+      // read content
+      receiver = new ReliableReceiver(sendQueue, packet);
+      receiver.start();
+
+      // return acknowledgement
       DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
-    } else if (packet.hasSynchronizeFlag()) {
-      returnPacket.setDownloadingFilesListFlag();
+      sendQueue.stopTimeout(packet.getSeqNumber()-1);
+      sender = new ReliableSender(returnDataPacket, sendQueue);
+      sender.start(); 
+      } else if (packet.hasSynchronizeFlag()) {
       returnPacket.setSynchronizeFlag();
-      returnPacket.setAcknowlegdementFlag();
-      // TODO: add list in content
-      DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      
+      // TODO: add list 
+      List<?> list = new LinkedList<String>();
+      
+      sender = new ReliableSender(returnPacket, list, sendQueue, packet.getSeqNumber() + 1);
+      sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
-      sendQueue.stopTimeout(packet.makePacket());
+      sendQueue.stopTimeout(packet.getSeqNumber() - 1);
     } else {
-      this.packetIncorrect();
+      this.packetIncorrect(packet);
     }
     
   }
 
   private void pausedFilesListPacketDealer(Packet packet) {
     Packet returnPacket = new Packet(address, port);
+    returnPacket.setPausedFilesListFlag();
+    returnPacket.setAcknowlegdementFlag();
     if (packet.hasSynchronizeFlag() && packet.hasAcknowledgementFlag()) {
-      // TODO do something with content of packet
-      returnPacket.setPausedFilesListFlag();
-      returnPacket.setAcknowlegdementFlag();
+      // read content
+      receiver = new ReliableReceiver(sendQueue, packet);
+      receiver.start();
+
+      // return acknowledgement
       DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      sendQueue.stopTimeout(packet.getSeqNumber()-1);
+      sender = new ReliableSender(returnDataPacket, sendQueue);
+      sender.start(); 
     } else if (packet.hasSynchronizeFlag()) {
-      returnPacket.setPausedFilesListFlag();
       returnPacket.setSynchronizeFlag();
-      returnPacket.setAcknowlegdementFlag();
-      // TODO: add list in content
-      DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      
+      // TODO: add list 
+      List<?> list = new LinkedList<String>();
+      
+      sender = new ReliableSender(returnPacket, list, sendQueue, packet.getSeqNumber() + 1);
+      sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
-      sendQueue.stopTimeout(packet.makePacket());
+      sendQueue.stopTimeout(packet.getSeqNumber() - 1);
     } else {
-      this.packetIncorrect();
+      this.packetIncorrect(packet);
     }
   }
 
   private void uploadingPacketDealer(Packet packet) {
     // TODO Auto-generated method stub
+    short filenumber = packet.getFileNumber();
+    boolean downloading = false;
+    
+    if (packet.hasSynchronizeFlag()) {      
+      receiver = new ReliableReceiver(sendQueue, filenumber, downloading);
+      this.receivingMap.put(filenumber, receiver);
+      receiver.start();
+      receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
+    } else if (packet.hasAcknowledgementFlag()) {
+      sender = sendingMap.get(filenumber);
+      sender.changeLastAcknowledgeReceived(packet.getAckNumber());
+    } else {
+      receiver = receivingMap.get(filenumber);
+      receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
+    }
     
   }
 
   private void exitPacketDealer(Packet packet) {
     Packet returnPacket = new Packet(address, port);
     if (packet.hasAcknowledgementFlag()) {
-      sendQueue.stopTimeout(packet.makePacket());
+      sendQueue.stopTimeout(packet.getSeqNumber() - 1);
     } else {
       // TODO exit
       returnPacket.setExitFlag();
       returnPacket.setAcknowlegdementFlag();
       DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.addToQueue(returnDataPacket);
+      sender = new ReliableSender(returnDataPacket, sendQueue);
+      sender.start();
     }
   }
   
@@ -315,64 +404,114 @@ public class PacketDealer {
     Packet packet = new Packet(address, port);
     packet.setAvailableFilesListFlag();
     packet.setSynchronizeFlag();
-    sendQueue.addToQueue(packet.makePacket());
+    
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    packet.setSeqNumber(sequenceNumber);
+    
+    sender = new ReliableSender(packet.makePacket(), sendQueue, sequenceNumber);
+    sender.start();
   }
   
-  public void downloadFile() {
-    // TODO add filenumber, sequence number
+  public void downloadFile(String filename, short filenumber) {
+    // TODO file number
     Packet packet = new Packet(address, port);
     packet.setDownloadingFlag();
     packet.setSynchronizeFlag();
-    sendQueue.addToQueue(packet.makePacket());
+    packet.setFileNumber(filenumber);
+    packet.setContent(filename.getBytes());
+    
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    packet.setSeqNumber(sequenceNumber);
+    
+    sender = new ReliableSender(packet.makePacket(), sendQueue, sequenceNumber);
+    sender.start();
   }
 
   public void queryStatistics() {
     Packet packet = new Packet(address, port);
     packet.setStatisticsFlag();
     packet.setSynchronizeFlag();
-    sendQueue.addToQueue(packet.makePacket());
+    
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    packet.setSeqNumber(sequenceNumber);
+    
+    sender = new ReliableSender(packet.makePacket(), sendQueue, sequenceNumber);
+    sender.start();
   }
   
   public void pauseFile() {
-    // TODO add filenumber
+    // TODO add file number
     Packet packet = new Packet(address, port);
     packet.setPauseFlag();
-    sendQueue.addToQueue(packet.makePacket());
+    
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    packet.setSeqNumber(sequenceNumber);
+    
+    sender = new ReliableSender(packet.makePacket(), sendQueue, sequenceNumber);
+    sender.start();
   }
   
   public void resumeFile() {
-    // TODO add filenumber
+    // TODO add file number
     Packet packet = new Packet(address, port);
     packet.setResumeFlag();
-    sendQueue.addToQueue(packet.makePacket());
+    
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    packet.setSeqNumber(sequenceNumber);
+    
+    sender = new ReliableSender(packet.makePacket(), sendQueue, sequenceNumber);
+    sender.start();
   }
   
   public void queryDownloadingFilesList() {
     Packet packet = new Packet(address, port);
     packet.setDownloadingFilesListFlag();
     packet.setSynchronizeFlag();
-    sendQueue.addToQueue(packet.makePacket());
+    
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    packet.setSeqNumber(sequenceNumber);
+    
+    sender = new ReliableSender(packet.makePacket(), sendQueue, sequenceNumber);
+    sender.start();
   }
   
   public void queryPausedFilesList() {
     Packet packet = new Packet(address, port);
     packet.setPausedFilesListFlag();
     packet.setSynchronizeFlag();
-    sendQueue.addToQueue(packet.makePacket());
+    
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    packet.setSeqNumber(sequenceNumber);
+    
+    sender = new ReliableSender(packet.makePacket(), sendQueue, sequenceNumber);
+    sender.start();
   }
   
-  public void uploadFile() {
-    // TODO filenumber, sequence number
-    Packet packet = new Packet(address, port);
-    packet.setUploadingFlag();
-    packet.setSynchronizeFlag();
-    sendQueue.addToQueue(packet.makePacket());
+  public void uploadFile(String filename, short filenumber) {
+    // TODO file number
+    boolean downloading = false;
+    sender = new ReliableSender(filename, sendQueue, filenumber, downloading);
+    this.sendingMap.put(filenumber, sender);
+    sender.start();
   }
   
   public void exitServer() {
     Packet packet = new Packet(address, port);
     packet.setExitFlag();
-    sendQueue.addToQueue(packet.makePacket());
+    
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    packet.setSeqNumber(sequenceNumber);
+    
+    sender = new ReliableSender(packet.makePacket(), sendQueue, sequenceNumber);
+    sender.start();
   }
   
 }

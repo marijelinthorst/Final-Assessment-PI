@@ -4,8 +4,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
-import java.net.DatagramPacket;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -13,25 +14,27 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.zip.CRC32;
 
 public class ReliableReceiver extends Thread {
+  // file receiving
   private short filenumber = 0;
   private SendQueue sendQueue;
   private boolean downloading;
-  private List<?> list;
-  private DatagramPacket packet;
   private ConcurrentLinkedQueue<byte[]> dataQueue;
-  private ConcurrentLinkedQueue<Integer> sequenceNumberQueue; 
+  private ConcurrentLinkedQueue<Integer> sequenceNumberQueue;
   
+  // list receiving
+  private List<?> list;
+   
   //sliding window receiver
   private final static int RECEIVEWINDOWSIZE = 20;
   private int lastFrameReceived;
   private int lastAcknowledgeSend;
-  private int firstFrameSeqNumber;
   private HashMap<Integer, byte[]> map;
-  private int contentLength = 494;
   private byte[] allData;
+  private boolean isFinished = false;
+  private boolean needToReceive = true;
  
   //TODO Path of a file 
-  static final String FILEPATH = ""; 
+  static final Path FILEPATH = Paths.get("/Users/marije.linthorst/Desktop/Receiving/"); 
   
   /**
    *  constructors for each type of command
@@ -42,28 +45,21 @@ public class ReliableReceiver extends Thread {
     this.downloading = downloading;
     this.dataQueue = new ConcurrentLinkedQueue<byte[]>();
     this.sequenceNumberQueue = new ConcurrentLinkedQueue<Integer>();
+    map = new HashMap<Integer, byte[]>();
   }
-  // what type does pi give?
-  public ReliableReceiver(SendQueue sendQueue) {
+  // this is for receiving list
+  public ReliableReceiver(SendQueue sendQueue, Packet packet) {
     this.sendQueue = sendQueue;
     this.dataQueue = new ConcurrentLinkedQueue<byte[]>();
     this.sequenceNumberQueue = new ConcurrentLinkedQueue<Integer>();
   }
-  public ReliableReceiver(DatagramPacket packet, SendQueue sendQueue) {
-    this.packet = packet;
-    this.sendQueue = sendQueue;
-    this.dataQueue = new ConcurrentLinkedQueue<byte[]>();
-    this.sequenceNumberQueue = new ConcurrentLinkedQueue<Integer>();
-  }
-  
+ 
   /**
    *  run: directs to specific run
    */
   public void run() {
     if (filenumber != 0) {
       this.runFileReliableTransfer();
-    } else if (packet != null) {
-      this.runPacketReliableTransfer();
     } else if (sendQueue != null) {
       this.runListReliableTransfer();
     } else {
@@ -73,47 +69,55 @@ public class ReliableReceiver extends Thread {
 
   private void runFileReliableTransfer() {
     int i = 0;
-    while (true) {
+    while (needToReceive) {
+      // receive the packet
       if (!dataQueue.isEmpty()) {
+        // get data and sequenceNumber
         byte[] data = dataQueue.remove();
         int sequenceNumber = this.sequenceNumberQueue.remove();
         
+        // initialize return packet (acknowledge)
         Packet packet = new Packet(sendQueue.getAddress(), sendQueue.getPort());
         packet.setFileNumber(filenumber);
+        packet.setAcknowlegdementFlag();
         if (downloading) {
           packet.setDownloadingFlag();
         } else {
           packet.setUploadingFlag();
         }
         
-        if (i == 0) { // this is first packet
+        if (i == 0) { // this is first packet (down+syn+ack/up+syn), get data and send down+ack/up+ack to SendingQueue
+          // data
           lastFrameReceived = sequenceNumber;
-          firstFrameSeqNumber = sequenceNumber;
-          int acknowledgeNumber = sequenceNumber +1;
           i++;
-        } else if (sequenceNumber - lastFrameReceived < RECEIVEWINDOWSIZE) {
+        } else if (sequenceNumber - lastFrameReceived < RECEIVEWINDOWSIZE && !map.containsKey(sequenceNumber)) { // packet in receiving window
           map.put(sequenceNumber, data);
         }
         
-        if (!map.isEmpty() && map.containsKey(lastFrameReceived + 1)) {
-          byte[] temp = Arrays.copyOf(allData, allData.length); 
-          byte[] bytesToAdd = map.get(lastFrameReceived + 1);
-          allData = Arrays.copyOf(temp, temp.length + bytesToAdd.length);
-          System.arraycopy(bytesToAdd, 0, allData, temp.length, bytesToAdd.length);
-          lastFrameReceived++;
-          i++;
-          // TODO: hier gebleven, alle waardes aanpassen en ack terug sturen
-          // System.out.println("");
-          // lastFrameReceived alleen veranderen als ie van buffer naar byte[] gaat
-        } 
-        // altijd ack sturen
-      }  
+        // whenever packet arrived, send acknowledge back with lastFrameReceived + 1 (= acknowledge number)
+        lastAcknowledgeSend = lastFrameReceived + 1;
+        packet.setAckNumber(lastAcknowledgeSend);
+        sendQueue.addAcknowlegdementToQueue(packet.makePacket());
+      }
+      
+      // arrange data  bytes in order by reading next sequence number from map
+      if (!map.isEmpty() && map.containsKey(lastFrameReceived + 1)) {
+        byte[] temp = Arrays.copyOf(allData, allData.length); 
+        byte[] bytesToAdd = map.get(lastFrameReceived + 1);
+        allData = Arrays.copyOf(temp, temp.length + bytesToAdd.length);
+        System.arraycopy(bytesToAdd, 0, allData, temp.length, bytesToAdd.length);
+        lastFrameReceived++;
+      } else if (isFinished) {
+        needToReceive = false;
+        this.writeByteToFile(allData);
+      }
     }  
   }
   
-  public synchronized void addToReadingQueue (byte[] data, int sequenceNumber) {
+  public synchronized void addToReadingQueue (byte[] data, int sequenceNumber, boolean finished) {
    this.dataQueue.add(data);
    this.sequenceNumberQueue.add(sequenceNumber);
+   this.isFinished = finished;
   }
   
   //-------------------------- file reader ---------------------------- 
@@ -163,7 +167,7 @@ public class ReliableReceiver extends Thread {
     
     if (Arrays.equals(checksumBytes, checksumBytesToCompare)) {
       try { 
-        File file = new File(FILEPATH + filename);
+        File file = FILEPATH.resolve(filename).toFile();
         // Initialise a pointer in file using OutputStream 
         OutputStream os = new FileOutputStream(file); 
 
@@ -183,12 +187,6 @@ public class ReliableReceiver extends Thread {
   
   //-------------------------------------------------------------------------------
   private void runListReliableTransfer() {
-    // TODO Auto-generated method stub
-    
-  }
-  
-  //-------------------------------------------------------------------------------
-  private void runPacketReliableTransfer() {
     // TODO Auto-generated method stub
     
   }

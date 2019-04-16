@@ -170,7 +170,7 @@ public class Client {
       case "2":
         System.out.println("2");
         // TODO select a file
-        dealer.downloadFile();
+        dealer.downloadFile("Plattegrond.jpg", (short) 1);
         break;
       case "3":
         System.out.println("3");
@@ -197,7 +197,7 @@ public class Client {
       case "8":
         System.out.println("8");
         // TODO select a file
-        dealer.uploadFile();
+        dealer.uploadFile("Plattegrond.jpg", (short) 2);
         break;
       case "9":
         System.out.println("9");
