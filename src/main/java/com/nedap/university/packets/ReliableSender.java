@@ -1,26 +1,19 @@
 package com.nedap.university.packets;
 
-import java.io.File;
-import java.io.IOException;
 import java.net.DatagramPacket;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Random;
-import java.util.zip.CRC32;
 
 public class ReliableSender extends Thread {
   // file sending
-  private File file;
   private String filename;
   private short filenumber = 0;
   private boolean downloading;
   
   // list sending
-  private List<?> list;
+  private String[] fileNames;
   
   // Single packet sending
   private DatagramPacket singlePacket;
@@ -29,6 +22,7 @@ public class ReliableSender extends Thread {
   // general sending
   private boolean isFinished;
   private SendQueue sendQueue;
+  boolean firstAckReceived = false;;
   
   // Sliding window sender variables
   private final static int SENDWINDOWSIZE = 10;
@@ -36,26 +30,32 @@ public class ReliableSender extends Thread {
   private int lastAcknowledgeReceived;
   private int lastFrameSend;
   private int contentLength = 494;
+  private FileDealer fileDealer;
   
   //TODO Path of a file 
-  private static final String HOME = System.getProperty("user.home");
-  private static final Path FILEPATH = Paths.get(HOME + "/Desktop/Sending/"); 
+  //private static final String HOME = System.getProperty("user.home");
+  //private static final Path FOLDERPATH = Paths.get(HOME + "/Desktop/Sending/"); 
 
   /**
    *  constructors for each type of command
    */
-  public ReliableSender(String filename, SendQueue sendQueue, short filenumber, boolean downloading, int sequenceNumber) {
+  public ReliableSender(String filename, SendQueue sendQueue, short filenumber, boolean downloading, int sequenceNumber, Path folderPath) {
     this.filename = filename;
     this.filenumber = filenumber;
     this.sendQueue = sendQueue;
     this.downloading = downloading;
     this.firstFrameSeqNumber = sequenceNumber;
+    fileDealer = new FileDealer(folderPath, filename, contentLength);
+    fileDealer.start();
+    lastAcknowledgeReceived = sequenceNumber - 3;
     
   }
   // what type does pi give?
-  public ReliableSender(Packet packet, List<?> list, SendQueue sendQueue , int sequenceNumber) {
-    this.list = list;
+  public ReliableSender(String[] fileNames, SendQueue sendQueue , int sequenceNumber) {
+    this.fileNames = fileNames;
     this.sendQueue = sendQueue;
+    this.singleSequenceNumber = sequenceNumber;
+    
   }
   public ReliableSender(DatagramPacket packet, SendQueue sendQueue) {
     this.singlePacket = packet;
@@ -72,9 +72,14 @@ public class ReliableSender extends Thread {
    *  run: directs to specific run
    */
   public void run() {
+    try {
+      Thread.sleep(1000);
+    } catch (InterruptedException e) {
+      //continue;
+    }
     if (filename != null) {
       this.runFileReliableTransfer();
-    } else if (list != null) {
+    } else if (fileNames != null) {
       this.runListReliableTransfer();
     } else if (singleSequenceNumber != 0) {
       this.runPacketReliableTransfer();
@@ -86,19 +91,15 @@ public class ReliableSender extends Thread {
   }
 
   public void runFileReliableTransfer() {
-    // get bytes to send
-    byte[] fileBytes = this.readFileToByte(filename);
     
-    // make random starting sequence number
+    //starting sequence number
     lastFrameSend = firstFrameSeqNumber;
     
     int i = 0;
-    int totalNoOfPackets = fileBytes.length/contentLength + 1;
+    int totalNoOfPackets = fileDealer.getTotalNumberOfPackets();
     
     // start loop
-    System.out.println("Start sending loop");
     while (i <= totalNoOfPackets) { // since sendQueue takes care of retransmissions, if last packet is send then loop can stop
-      System.out.println("i = " + i);
       // initialise packet with all flags in common
       Packet packet = new Packet(sendQueue.getAddress(), sendQueue.getPort());
       packet.setFileNumber(filenumber);
@@ -121,12 +122,12 @@ public class ReliableSender extends Thread {
         System.out.println("SENDING PACKET NUMBER: " + i);
         lastFrameSend++;
         i++;
-      } else if (lastFrameSend + 1 - this.getLastAcknowledgeReceived() < SENDWINDOWSIZE) { // it is in the window
+      } else if (lastFrameSend + 1 - this.getLastAcknowledgeReceived() < SENDWINDOWSIZE && firstAckReceived) { // it is in the window
         if (i == totalNoOfPackets) {
           packet.setFinalFlag();
           System.out.print("Sending last packet: ");
         }
-        byte[] content = Arrays.copyOfRange(fileBytes, (i-1)*contentLength, i*contentLength-1);
+        byte[] content = fileDealer.readFomWritingQueue();
         packet.setContent(content);
         sendQueue.addToQueue(packet.makePacket(), lastFrameSend + 1);
         
@@ -150,56 +151,11 @@ public class ReliableSender extends Thread {
   }
   
   public synchronized void changeLastAcknowledgeReceived (int lastAcknowledgeReceived) {
-    this.lastAcknowledgeReceived = lastAcknowledgeReceived; 
-  }
-  
-  //-------------------------- file reader ----------------------------
-  private byte[] readFileToByte (String filename) {
-    // filename and length to byte[]
-    byte[] filenameBytes = filename.getBytes();
-    int filenameLength = filenameBytes.length;
-    byte[] filenameLengthBytes = ByteBuffer.allocate(4).putInt(filenameLength).array();
-    
-    // write file content and length to byte[]
-    System.out.println("Filename: " + filename);
-    //System.out.println(Arrays.toString(filepath.codePoints().toArray()));
-    this.file = FILEPATH.resolve(filename).toFile();
-    byte[] fileBytes = null;
-    try {
-      fileBytes = Files.readAllBytes(file.toPath());
-    } catch (IOException e) {
-      System.out.println("Exception: " + e);
-      e.printStackTrace();
-    }
-    int fileLength = fileBytes.length;
-    byte[] fileLengthBytes = ByteBuffer.allocate(4).putInt(fileLength).array();
-    
-    // calculate checksum and put into 4 bytes
-    // dataWithoutChecksum = filenameLengthBytes + filenameBytes + fileLengthBytes + fileBytes
-    byte[] dataWithoutChecksum = new byte[filenameLengthBytes.length + filenameBytes.length + fileLengthBytes.length + fileBytes.length];
-    System.arraycopy(filenameLengthBytes, 0, dataWithoutChecksum, 0, filenameLengthBytes.length); 
-    System.arraycopy(filenameBytes, 0, dataWithoutChecksum, filenameLengthBytes.length, filenameBytes.length); 
-    System.arraycopy(fileLengthBytes, 0, dataWithoutChecksum, filenameLengthBytes.length + filenameBytes.length, fileLengthBytes.length);
-    System.arraycopy(fileBytes, 0, dataWithoutChecksum, filenameLengthBytes.length + filenameBytes.length + fileLengthBytes.length, filenameBytes.length);
-    
-    CRC32 crc = new CRC32();
-    crc.update(dataWithoutChecksum);
-    long longChecksum = crc.getValue();
-    ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-    buffer.putLong(longChecksum);
-    byte[] tooLong =  buffer.array();
-    byte[] checksumBytes = new byte[4];
-    System.arraycopy(tooLong,4,checksumBytes,0,checksumBytes.length);
-    
-    // bytesToSend = filenameLengthBytes + filenameBytes + checksumBytes + fileLengthBytes + fileBytes
-    byte [] bytesToSend = new byte[filenameLengthBytes.length + filenameBytes.length + checksumBytes.length + fileLengthBytes.length + fileBytes.length]; 
-    System.arraycopy(filenameLengthBytes, 0, bytesToSend, 0, filenameLengthBytes.length); 
-    System.arraycopy(filenameBytes, 0, bytesToSend, filenameLengthBytes.length, filenameBytes.length);
-    System.arraycopy(checksumBytes, 0, bytesToSend, filenameLengthBytes.length + filenameBytes.length, checksumBytes.length); 
-    System.arraycopy(fileLengthBytes, 0, bytesToSend, filenameLengthBytes.length + filenameBytes.length + checksumBytes.length, fileLengthBytes.length);
-    System.arraycopy(fileBytes, 0, bytesToSend, filenameLengthBytes.length + filenameBytes.length + checksumBytes.length + fileLengthBytes.length, filenameBytes.length);
-    
-    return bytesToSend;
+    firstAckReceived = true;
+    System.out.println("RECEIVED ACKNOWLEDGE NUMBER: " + lastAcknowledgeReceived);
+    if (this.lastAcknowledgeReceived < lastAcknowledgeReceived) {
+      this.lastAcknowledgeReceived = lastAcknowledgeReceived;
+    } 
   }
   
   //-------------------------------------------------------------------------------
@@ -221,7 +177,29 @@ public class ReliableSender extends Thread {
   // -------------------------------------------------------------------------------
   public void runListReliableTransfer() {
     while (!isFinished) {
-      // TODO
+      Packet packet = new Packet(sendQueue.getAddress(), sendQueue.getPort());
+      packet.setAvailableFilesListFlag();
+      packet.setAcknowlegdementFlag();
+      packet.setSynchronizeFlag();
+      packet.setAckNumber(singleSequenceNumber);
+      
+      String toSend = "";
+      for (String current: fileNames) {
+        current = current + "\n";
+        toSend = toSend + current;
+      }
+      byte[] namesToSend = toSend.getBytes();
+      
+      // set filenames length and filenames
+      int namesToSendLength = namesToSend.length;
+      byte[] namesToSendLengthBytes = ByteBuffer.allocate(4).putInt(namesToSendLength).array();
+      byte[] content = new byte[namesToSend.length + namesToSendLengthBytes.length];     
+      System.arraycopy(namesToSendLengthBytes, 0, content, 0, namesToSendLengthBytes.length);
+      System.arraycopy(namesToSend, 0, content, namesToSendLengthBytes.length, namesToSend.length);
+      packet.setContent(content);
+      
+      sendQueue.addToQueue(packet.makePacket(), singleSequenceNumber);
+      isFinished = true;
     }
   }
   

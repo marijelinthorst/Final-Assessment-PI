@@ -31,7 +31,7 @@ public class SendQueue extends Thread {
     while (true) {
       try {
         if (!queue.isEmpty()) {
-          //System.out.println("Sending");
+          //System.out.println("Sending from queue");
           socket.send(queue.remove());
         }  
       } catch (IOException e) {
@@ -65,6 +65,11 @@ public class SendQueue extends Thread {
           timer.schedule(task, delay);
           timers.put(sequenceNumber, task);
         } else {
+          System.out.println("Retransmission");
+          TimerTask thisTimer = timers.get(sequenceNumber);
+          thisTimer.cancel();
+          timers.remove(sequenceNumber);
+          
           addToQueue(packet, sequenceNumber);
         }
       }
@@ -72,9 +77,11 @@ public class SendQueue extends Thread {
   }
   
   public synchronized void stopTimeout(int sequenceNumber) {
-    TimerTask thisTimer = timers.get(sequenceNumber);
-    thisTimer.cancel();
-    timers.remove(sequenceNumber);
+    if (timers.containsKey(sequenceNumber)) {
+      TimerTask thisTimer = timers.get(sequenceNumber);
+      thisTimer.cancel();
+      timers.remove(sequenceNumber);
+    }    
   }
   
   public InetAddress getAddress() {

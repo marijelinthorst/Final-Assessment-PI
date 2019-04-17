@@ -1,17 +1,11 @@
 package com.nedap.university.packets;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStream;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.zip.CRC32;
 
 public class ReliableReceiver extends Thread {
   // file receiving
@@ -22,7 +16,7 @@ public class ReliableReceiver extends Thread {
   private ConcurrentLinkedQueue<Integer> sequenceNumberQueue;
   
   // list receiving
-  private List<?> list;
+  private Packet packet;
    
   //sliding window receiver
   private final static int RECEIVEWINDOWSIZE = 20;
@@ -33,28 +27,28 @@ public class ReliableReceiver extends Thread {
   private boolean needToReceive = true;
  
   //TODO Path of a file 
-  static final Path FILEPATH = Paths.get("/Users/marije.linthorst/Desktop/Receiving/"); 
+  //private static final String HOME = System.getProperty("user.home");
+  //static final Path FOLDERPATH = Paths.get(HOME + "/Desktop/Receiving/"); 
   private FileDealer fileDealer;
   
   
   /**
    *  constructors for each type of command
    */
-  public ReliableReceiver(SendQueue sendQueue, short filenumber, boolean downloading) {
+  public ReliableReceiver(SendQueue sendQueue, short filenumber, boolean downloading, Path folderPath) {
     this.filenumber = filenumber;
     this.sendQueue = sendQueue;
     this.downloading = downloading;
     this.dataQueue = new ConcurrentLinkedQueue<byte[]>();
     this.sequenceNumberQueue = new ConcurrentLinkedQueue<Integer>();
     map = new HashMap<Integer, byte[]>();
-    fileDealer = new FileDealer();
+    fileDealer = new FileDealer(folderPath);
     fileDealer.start();
   }
   // this is for receiving list
   public ReliableReceiver(SendQueue sendQueue, Packet packet) {
     this.sendQueue = sendQueue;
-    this.dataQueue = new ConcurrentLinkedQueue<byte[]>();
-    this.sequenceNumberQueue = new ConcurrentLinkedQueue<Integer>();
+    this.packet = packet;
   }
  
   /**
@@ -78,7 +72,7 @@ public class ReliableReceiver extends Thread {
     int i = 0;
     while (needToReceive) {
       // receive the packet
-      if (!dataQueue.isEmpty()) {
+      if (!dataQueue.isEmpty() && !sequenceNumberQueue.isEmpty()) {
         // get data and sequenceNumber
         byte[] data = dataQueue.remove();
         int sequenceNumber = this.sequenceNumberQueue.remove();
@@ -114,6 +108,18 @@ public class ReliableReceiver extends Thread {
         fileDealer.addToWritingQueue(map.get(lastFrameReceived + 1));
         lastFrameReceived++;
       } else if (isFinished) {
+        Packet packet = new Packet(sendQueue.getAddress(), sendQueue.getPort());
+        packet.setFileNumber(filenumber);
+        packet.setAcknowlegdementFlag();
+        if (downloading) {
+          packet.setDownloadingFlag();
+        } else {
+          packet.setUploadingFlag();
+        }
+        lastAcknowledgeSend = lastFrameReceived + 1;
+        packet.setAckNumber(lastAcknowledgeSend);
+        System.out.println("SENDING ACK PACKET NUMBER: " + i + " ACK NO: " + lastAcknowledgeSend);
+        sendQueue.addAcknowlegdementToQueue(packet.makePacket());
         needToReceive = false;
       }
     }  
@@ -130,8 +136,24 @@ public class ReliableReceiver extends Thread {
   
   //-------------------------------------------------------------------------------
   private void runListReliableTransfer() {
-    // TODO Auto-generated method stub
+    // get filenames length
+    byte[] content = packet.getContent();
+    byte[] filenamesLengthBytes = new byte[4];
+    System.arraycopy(content, 0, filenamesLengthBytes, 0, filenamesLengthBytes.length); 
+    int filenamesLength = new BigInteger(filenamesLengthBytes).intValue();
     
+    // get filenames
+    byte[] filenameBytes = new byte[filenamesLength];
+    System.arraycopy(content, filenamesLengthBytes.length, filenameBytes, 0, filenameBytes.length); 
+    String filenames = new String(filenameBytes);
+    
+    System.out.println(filenames);
+    
+    Packet returnPacket = new Packet(sendQueue.getAddress(), sendQueue.getPort());
+    returnPacket.setAvailableFilesListFlag();
+    returnPacket.setAcknowlegdementFlag();
+    returnPacket.setAckNumber(packet.getSeqNumber()+1);
+    sendQueue.addAcknowlegdementToQueue(returnPacket.makePacket());
   }
   
   //-------------------------------------------------------------------------------

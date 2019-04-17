@@ -8,7 +8,7 @@ public class ThreadInMapTest {
   private  static HashMap<Integer, TestThread> map;
   
   public static void main(String[] args) {
-
+/**
     map = new HashMap<Integer, TestThread>();
     
     test = new TestThread("1: Ik ben aan");
@@ -33,6 +33,20 @@ public class ThreadInMapTest {
     
     String newFilename = new String (filenameBytes);
     System.out.println(newFilename);
+    */
+    
+    String Hallo = "hallo";
+    String [] array = {Hallo, Hallo, Hallo};
+    
+    String toSend = "";
+    for (String current: array) {
+      current = current + "\n";
+      toSend = toSend + current;
+    }
+    
+    
+    System.out.println(toSend);
+    
   }
 }
 

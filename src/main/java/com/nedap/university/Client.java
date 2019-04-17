@@ -16,6 +16,10 @@ public class Client {
 
   // booleans which determine status of client
   private boolean isFinished = false;
+  private boolean enterFileName = false;
+  private boolean download = false;
+  
+  private short fileNumber = 1;
 
   // TODO give name??
   private static InetAddress serverAddress;
@@ -142,35 +146,39 @@ public class Client {
   }
   
   public boolean shouldAskInput() {
-    // TODO
     return true;
   }
   
   public void showPrompt() {
     // TODO determine intuitive TUI
-    System.out.println("What do you want to do:");
-    System.out.println("1. See a list of files the server has available for downloading");
-    System.out.println("2. Download a file from the server");
-    System.out.println("3. See uploading/downloading statistics");
-    System.out.println("4. Pause a file");
-    System.out.println("5. Resume a file");
-    System.out.println("6. See a list of files currently being downloaded");
-    System.out.println("7. See a list of files currently paused"); 
-    System.out.println("8. Upload file to the server");
-    System.out.println("9. Exit");
-    System.out.println("Please enter the number of the action you wish to do");
+    if (!enterFileName) {
+      System.out.println("What do you want to do:");
+      System.out.println("1. See a list of files the server has available for downloading");
+      System.out.println("2. Download a file from the server");
+      System.out.println("3. See uploading/downloading statistics");
+      System.out.println("4. Pause a file");
+      System.out.println("5. Resume a file");
+      System.out.println("6. See a list of files currently being downloaded");
+      System.out.println("7. See a list of files currently paused"); 
+      System.out.println("8. Upload file to the server");
+      System.out.println("9. Exit");
+      System.out.println("Please enter the number of the action you wish to do");
+    } else {
+      System.out.println("Enter file name please");
+    }
   }
 
   public void dispatchUILine(String input) {
-    switch (input) {
+    if (!enterFileName) {
+      switch (input) {
       case "1":
         System.out.println("1");
         dealer.queryAvailableFilesList();
         break;
       case "2":
         System.out.println("2");
-        // TODO select a file
-        dealer.downloadFile("Plattegrond.jpg", (short) 1);
+        enterFileName = true;
+        download = true;
         break;
       case "3":
         System.out.println("3");
@@ -196,8 +204,8 @@ public class Client {
         break;
       case "8":
         System.out.println("8");
-        // TODO select a file
-        dealer.uploadFile("Plattegrond.jpg", (short) 2);
+        enterFileName = true;
+        download = false;
         break;
       case "9":
         System.out.println("9");
@@ -207,7 +215,16 @@ public class Client {
       default:
         System.out.println("That number is not  a valid choice!");
         break;
-    }
+      }
+    } else if (download) {
+      dealer.downloadFile(input, fileNumber);
+      fileNumber++;
+      enterFileName = false;
+    } else {
+      dealer.uploadFile(input, fileNumber);
+      fileNumber++;
+      enterFileName = false;
+    }    
   }
 
   // ---------------- server input ---------------------

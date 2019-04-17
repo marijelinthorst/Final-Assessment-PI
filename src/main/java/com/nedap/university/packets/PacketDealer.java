@@ -1,14 +1,15 @@
 package com.nedap.university.packets;
 
+import java.io.File;
 import java.math.BigInteger;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Random;
 
 public class PacketDealer {
@@ -48,7 +49,9 @@ public class PacketDealer {
    * - remove files
    */
   
-  
+  private static final String HOME = System.getProperty("user.home");
+  private static final Path FOLDERPATHSERVER = Paths.get(HOME + "/Desktop/Server/"); 
+  private static final Path FOLDERPATHCLIENT = Paths.get(HOME + "/Desktop/Client/");
   
   private InetAddress address;
   private int port;
@@ -146,34 +149,35 @@ public class PacketDealer {
       // read content
       receiver = new ReliableReceiver(sendQueue, packet);
       receiver.start();
-
-      // return acknowledgement
-      DatagramPacket returnDataPacket = returnPacket.makePacket();
-      sendQueue.stopTimeout(packet.getSeqNumber()-1);
-      sender = new ReliableSender(returnDataPacket, sendQueue);
-      sender.start();
+      sendQueue.stopTimeout(packet.getAckNumber()-1);
     } else if (packet.hasSynchronizeFlag()) {
-      returnPacket.setSynchronizeFlag();
-      
-      // TODO: add list 
-      List<?> list = new LinkedList<String>();
-      
-      sender = new ReliableSender(returnPacket, list, sendQueue, packet.getSeqNumber() + 1);
+      sender = new ReliableSender(this.getAFL(), sendQueue, packet.getSeqNumber() + 1);
       sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
-      sendQueue.stopTimeout(packet.getSeqNumber() - 1);
+      sendQueue.stopTimeout(packet.getAckNumber() - 1);
     } else {
       this.packetIncorrect(packet);
     }
   }
   
+  private String[] getAFL() {
+    File fileFolder = FOLDERPATHSERVER.toFile();
+    File[] filesOnPI = fileFolder.listFiles();
+    String[] filesOnPINames = new String[filesOnPI.length];
+    if(filesOnPI.length>0){
+      for(int i = 0; i < filesOnPI.length; i++){
+        filesOnPINames[i]=filesOnPI[i].getName();
+      }
+    }
+    return filesOnPINames;
+  }
+  
   private void downloadingPacketDealer(Packet packet) {
-    // TODO Auto-generated method stub
     short filenumber = packet.getFileNumber();
     boolean downloading = true;
     
     if (packet.hasSynchronizeFlag() && packet.hasAcknowledgementFlag()) {    
-      receiver = new ReliableReceiver(sendQueue, filenumber, downloading);
+      receiver = new ReliableReceiver(sendQueue, filenumber, downloading, FOLDERPATHCLIENT);
       this.receivingMap.put(filenumber, receiver);
       receiver.start();
       receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
@@ -191,7 +195,7 @@ public class PacketDealer {
       System.arraycopy(content, filenameLengthBytes.length, filenameBytes, 0, filenameBytes.length); 
       String filename = new String(filenameBytes);
       
-      sender = new ReliableSender(filename, sendQueue, filenumber, downloading, packet.getSeqNumber());
+      sender = new ReliableSender(filename, sendQueue, filenumber, downloading, packet.getSeqNumber(), FOLDERPATHSERVER);
       this.sendingMap.put(filenumber, sender);
       sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
@@ -205,6 +209,7 @@ public class PacketDealer {
   }
 
   private void statisticsPacketDealer(Packet packet) {
+    // TODO
     Packet returnPacket = new Packet(address, port);
     returnPacket.setStatisticsFlag();
     returnPacket.setAcknowlegdementFlag();
@@ -219,12 +224,8 @@ public class PacketDealer {
       sender = new ReliableSender(returnDataPacket, sendQueue);
       sender.start();
     } else if (packet.hasSynchronizeFlag()) {
-      returnPacket.setSynchronizeFlag();
-      
-      // TODO: add statistics in content
-      List<?> list = new LinkedList<String>();
-      
-      sender = new ReliableSender(returnPacket, list, sendQueue, packet.getSeqNumber() + 1);
+      String[] todo = {""};
+      sender = new ReliableSender(todo, sendQueue, packet.getSeqNumber() + 1);
       sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
       sendQueue.stopTimeout(packet.getSeqNumber() - 1);
@@ -262,6 +263,7 @@ public class PacketDealer {
   }
 
   private void downloadingFilesListPacketDealer(Packet packet) {
+    // TODO
     Packet returnPacket = new Packet(address, port);
     returnPacket.setDownloadingFilesListFlag();
     returnPacket.setAcknowlegdementFlag();
@@ -275,13 +277,9 @@ public class PacketDealer {
       sendQueue.stopTimeout(packet.getSeqNumber()-1);
       sender = new ReliableSender(returnDataPacket, sendQueue);
       sender.start(); 
-      } else if (packet.hasSynchronizeFlag()) {
-      returnPacket.setSynchronizeFlag();
-      
-      // TODO: add list 
-      List<?> list = new LinkedList<String>();
-      
-      sender = new ReliableSender(returnPacket, list, sendQueue, packet.getSeqNumber() + 1);
+    } else if (packet.hasSynchronizeFlag()) {
+      String[] todo = {""};
+      sender = new ReliableSender(todo, sendQueue, packet.getSeqNumber() + 1);
       sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
       sendQueue.stopTimeout(packet.getSeqNumber() - 1);
@@ -292,6 +290,7 @@ public class PacketDealer {
   }
 
   private void pausedFilesListPacketDealer(Packet packet) {
+    // TODO
     Packet returnPacket = new Packet(address, port);
     returnPacket.setPausedFilesListFlag();
     returnPacket.setAcknowlegdementFlag();
@@ -306,12 +305,8 @@ public class PacketDealer {
       sender = new ReliableSender(returnDataPacket, sendQueue);
       sender.start(); 
     } else if (packet.hasSynchronizeFlag()) {
-      returnPacket.setSynchronizeFlag();
-      
-      // TODO: add list 
-      List<?> list = new LinkedList<String>();
-      
-      sender = new ReliableSender(returnPacket, list, sendQueue, packet.getSeqNumber() + 1);
+      String[] todo = {""};
+      sender = new ReliableSender(todo, sendQueue, packet.getSeqNumber() + 1);
       sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
       sendQueue.stopTimeout(packet.getSeqNumber() - 1);
@@ -326,13 +321,14 @@ public class PacketDealer {
     boolean downloading = false;
     
     if (packet.hasSynchronizeFlag()) {      
-      receiver = new ReliableReceiver(sendQueue, filenumber, downloading);
+      receiver = new ReliableReceiver(sendQueue, filenumber, downloading, FOLDERPATHSERVER);
       this.receivingMap.put(filenumber, receiver);
       receiver.start();
       receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
     } else if (packet.hasAcknowledgementFlag()) {
       sender = sendingMap.get(filenumber);
       sender.changeLastAcknowledgeReceived(packet.getAckNumber());
+      sendQueue.stopTimeout(packet.getAckNumber()-1);
     } else {
       receiver = receivingMap.get(filenumber);
       receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
@@ -428,7 +424,6 @@ public class PacketDealer {
   }
   
   public void downloadFile(String filename, short filenumber) {
-    // TODO file number
     Packet packet = new Packet(address, port);
     packet.setDownloadingFlag();
     packet.setSynchronizeFlag();
@@ -518,9 +513,13 @@ public class PacketDealer {
   
   public void uploadFile(String filename, short filenumber) {
     // TODO file number
+    Random random = new Random(); 
+    int sequenceNumber = random.nextInt();
+    
     boolean downloading = false;
-    sender = new ReliableSender(filename, sendQueue, filenumber, downloading);
+    sender = new ReliableSender(filename, sendQueue, filenumber, downloading, sequenceNumber, FOLDERPATHCLIENT);
     this.sendingMap.put(filenumber, sender);
+    sender.changeLastAcknowledgeReceived(sequenceNumber-1);
     sender.start();
   }
   
