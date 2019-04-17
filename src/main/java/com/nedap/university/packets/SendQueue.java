@@ -12,20 +12,26 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class SendQueue extends Thread {
   private ConcurrentLinkedQueue<DatagramPacket> queue;
   private DatagramSocket socket;
-  private long delay = 5000; //time before retransmission in milliseconds 
-  private HashMap<Integer,Timer> timers;
+  private long delay = 10000; //time before retransmission in milliseconds 
+  private HashMap<Integer,TimerTask> timers;
+  private InetAddress address;
+  private int port;
+  private Timer timer;
 
-  public SendQueue(DatagramSocket socket) {
-    this.timers = new HashMap<Integer,Timer>();
+  public SendQueue(DatagramSocket socket, InetAddress address, int port) {
+    this.timers = new HashMap<Integer,TimerTask>();
     this.queue = new ConcurrentLinkedQueue<DatagramPacket>();
     this.socket = socket;
+    this.address = address;
+    this.port = port;
+    timer = new Timer();
   }
  
   public void run() {
     while (true) {
       try {
         if (!queue.isEmpty()) {
-          System.out.println("Sending");
+          //System.out.println("Sending");
           socket.send(queue.remove());
         }  
       } catch (IOException e) {
@@ -36,9 +42,9 @@ public class SendQueue extends Thread {
   }
   
   public void addToQueue(DatagramPacket packet, int sequenceNumber) {
-    Timer timer = new Timer();
-    timer.schedule(this.getTask(packet, sequenceNumber), delay);
-    timers.put(sequenceNumber, timer);
+    TimerTask task = this.getTask(packet, sequenceNumber);
+    timer.schedule(task, delay);
+    timers.put(sequenceNumber, task);
     queue.add(packet);
   }
   
@@ -51,10 +57,13 @@ public class SendQueue extends Thread {
       @Override
       public void run() { 
         if (queue.contains(packet)) {
+          TimerTask thisTimer = timers.get(sequenceNumber);
+          thisTimer.cancel();
           timers.remove(sequenceNumber);
-          Timer timer = new Timer();
-          timer.schedule(getTask(packet, sequenceNumber), delay);
-          timers.put(sequenceNumber, timer);
+          
+          TimerTask task = getTask(packet, sequenceNumber);
+          timer.schedule(task, delay);
+          timers.put(sequenceNumber, task);
         } else {
           addToQueue(packet, sequenceNumber);
         }
@@ -63,17 +72,17 @@ public class SendQueue extends Thread {
   }
   
   public synchronized void stopTimeout(int sequenceNumber) {
-    Timer thisTimer = timers.get(sequenceNumber);
+    TimerTask thisTimer = timers.get(sequenceNumber);
     thisTimer.cancel();
     timers.remove(sequenceNumber);
   }
   
   public InetAddress getAddress() {
-    return socket.getInetAddress();
+    return address;
   }
   
   public int getPort() {
-    return socket.getPort();
+    return port;
   }
 
 }
