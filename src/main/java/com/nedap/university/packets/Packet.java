@@ -227,9 +227,9 @@ public class Packet {
   }
   
   public void setContent (byte[] content) {
-    int start = contentLength - content.length;
-    for (int i = start; i < contentLength; i++) {
-      data[FNL+SNL+ANL+WSL+CSL+FL+i] = content[i - start];
+    //int start = contentLength - content.length;
+    for (int i = 0; i < contentLength && i < content.length; i++) {
+      data[FNL+SNL+ANL+WSL+CSL+FL+i] = content[i ];
     }
   }
   
