@@ -38,17 +38,19 @@ public class ReliableSender extends Thread {
   private int contentLength = 494;
   
   //TODO Path of a file 
-  private static final String home = System.getProperty("user.home");
-  private static final Path FILEPATH = Paths.get(home + "/Desktop/Sending/Plattegrond.jpg"); 
+  private static final String HOME = System.getProperty("user.home");
+  private static final Path FILEPATH = Paths.get(HOME + "/Desktop/Sending/"); 
 
   /**
    *  constructors for each type of command
    */
-  public ReliableSender(String filename, SendQueue sendQueue, short filenumber, boolean downloading) {
+  public ReliableSender(String filename, SendQueue sendQueue, short filenumber, boolean downloading, int sequenceNumber) {
     this.filename = filename;
     this.filenumber = filenumber;
     this.sendQueue = sendQueue;
     this.downloading = downloading;
+    this.firstFrameSeqNumber = sequenceNumber;
+    
   }
   // what type does pi give?
   public ReliableSender(Packet packet, List<?> list, SendQueue sendQueue , int sequenceNumber) {
@@ -88,15 +90,15 @@ public class ReliableSender extends Thread {
     byte[] fileBytes = this.readFileToByte(filename);
     
     // make random starting sequence number
-    Random random = new Random(); 
-    firstFrameSeqNumber = random.nextInt();
-    lastFrameSend = firstFrameSeqNumber - 1;
+    lastFrameSend = firstFrameSeqNumber;
     
     int i = 0;
-    int totalNoOfPackets = fileBytes.length/contentLength;
+    int totalNoOfPackets = fileBytes.length/contentLength + 1;
     
     // start loop
+    System.out.println("Start sending loop");
     while (i <= totalNoOfPackets) { // since sendQueue takes care of retransmissions, if last packet is send then loop can stop
+      System.out.println("i = " + i);
       // initialise packet with all flags in common
       Packet packet = new Packet(sendQueue.getAddress(), sendQueue.getPort());
       packet.setFileNumber(filenumber);
@@ -112,6 +114,7 @@ public class ReliableSender extends Thread {
         packet.setSynchronizeFlag();
         if (downloading) {
           packet.setAcknowlegdementFlag();
+          packet.setAckNumber(lastFrameSend + 1);
         }
         sendQueue.addToQueue(packet.makePacket(), lastFrameSend + 1);
         
@@ -121,6 +124,7 @@ public class ReliableSender extends Thread {
       } else if (lastFrameSend + 1 - this.getLastAcknowledgeReceived() < SENDWINDOWSIZE) { // it is in the window
         if (i == totalNoOfPackets) {
           packet.setFinalFlag();
+          System.out.print("Sending last packet: ");
         }
         byte[] content = Arrays.copyOfRange(fileBytes, (i-1)*contentLength, i*contentLength-1);
         packet.setContent(content);
@@ -158,9 +162,8 @@ public class ReliableSender extends Thread {
     
     // write file content and length to byte[]
     System.out.println("Filename: " + filename);
-    this.file = FILEPATH.toFile();
-    
-    
+    //System.out.println(Arrays.toString(filepath.codePoints().toArray()));
+    this.file = FILEPATH.resolve(filename).toFile();
     byte[] fileBytes = null;
     try {
       fileBytes = Files.readAllBytes(file.toPath());
