@@ -1,8 +1,10 @@
 package com.nedap.university.packets;
 
+import java.math.BigInteger;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -64,17 +66,17 @@ public class PacketDealer {
   public PacketDealer(DatagramSocket socket, InetAddress address, int port) {
     this.address = address;
     this.port = port;
-    sendQueue = new SendQueue(socket);
+    sendQueue = new SendQueue(socket, address, port);
     sendQueue.start();
     sendingMap = new HashMap<Short, ReliableSender>();
     receivingMap = new HashMap<Short, ReliableReceiver>();
   }
   
   public void readPackage(DatagramPacket dataPacket) {
-    System.out.println("Received a packet:");
+    System.out.println("Received a packet");
     Packet packet = new Packet (dataPacket);    
     if (Arrays.equals(packet.getChecksum(), packet.calculateChecksum())) {
-      System.out.println("  Checksum correct");
+      //System.out.println("  Checksum correct");
       this.checkFlags(packet);
     } else {
       this.packetIncorrect(packet);
@@ -89,31 +91,31 @@ public class PacketDealer {
    */
   private void checkFlags(Packet packet) {    
     if (checkAvailableFilesListCorrectFlags(packet)) {
-      System.out.println("  AFL packet");
+      //System.out.println("  AFL packet");
       this.availableFilesListPacketDealer(packet);
     } else if (checkDownloadingCorrectFlags(packet)) {
-      System.out.println("  DOWN packet");
+      //System.out.println("  DOWN packet");
       this.downloadingPacketDealer(packet);
     } else if (checkStatisticsCorrectFlags(packet)) {
-      System.out.println("  STAT packet");
+      //System.out.println("  STAT packet");
       this.statisticsPacketDealer(packet);
     } else if (checkPauseCorrectFlags(packet)) {
-      System.out.println("  PAU packet");
+      //System.out.println("  PAU packet");
       this.pausePacketDealer(packet);
     } else if (checkResumeCorrectFlags(packet)) {
-      System.out.println("  RES packet");
+      //System.out.println("  RES packet");
       this.resumePacketDealer(packet);
     } else if (checkDownloadingFilesListCorrectFlags(packet)) {
-      System.out.println("  DFL packet");
+      //System.out.println("  DFL packet");
       this.downloadingFilesListPacketDealer(packet);
     } else if (checkPausedFilesListCorrectFlags(packet)) {
-      System.out.println("  PFL packet");
+      //System.out.println("  PFL packet");
       this.pausedFilesListPacketDealer(packet);
     } else if (checkUploadingCorrectFlags(packet)) {
-      System.out.println("  UP packet");
+      //System.out.println("  UP packet");
       this.uploadingPacketDealer(packet);
     } else if (checkExitCorrectFlags(packet)) {
-      System.out.println("  EXIT packet");
+      //System.out.println("  EXIT packet");
       this.exitPacketDealer(packet);
     } else {
       this.packetIncorrect(packet);
@@ -175,15 +177,27 @@ public class PacketDealer {
       this.receivingMap.put(filenumber, receiver);
       receiver.start();
       receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
-    } else if (packet.hasSynchronizeFlag()) {;
-      String filename = new String(packet.getContent());
+      sendQueue.stopTimeout(packet.getAckNumber()-1);
+    } else if (packet.hasSynchronizeFlag()) {
       
-      sender = new ReliableSender(filename, sendQueue, filenumber, downloading);
+      // get filename length
+      byte[] content = packet.getContent();
+      byte[] filenameLengthBytes = new byte[4];
+      System.arraycopy(content, 0, filenameLengthBytes, 0, filenameLengthBytes.length); 
+      int filenameLength = new BigInteger(filenameLengthBytes).intValue();
+      
+      // get filename
+      byte[] filenameBytes = new byte[filenameLength];
+      System.arraycopy(content, filenameLengthBytes.length, filenameBytes, 0, filenameBytes.length); 
+      String filename = new String(filenameBytes);
+      
+      sender = new ReliableSender(filename, sendQueue, filenumber, downloading, packet.getSeqNumber());
       this.sendingMap.put(filenumber, sender);
       sender.start();
     } else if (packet.hasAcknowledgementFlag()) {
       sender = sendingMap.get(filenumber);
       sender.changeLastAcknowledgeReceived(packet.getAckNumber());
+      sendQueue.stopTimeout(packet.getAckNumber()-1);
     } else {
       receiver = receivingMap.get(filenumber);
       receiver.addToReadingQueue(packet.getContent(), packet.getSeqNumber(), packet.hasFinalFlag());
@@ -419,7 +433,15 @@ public class PacketDealer {
     packet.setDownloadingFlag();
     packet.setSynchronizeFlag();
     packet.setFileNumber(filenumber);
-    packet.setContent(filename.getBytes());
+    
+    // set filename length and filename
+    byte [] filenameBytes = filename.getBytes();
+    int filenameLength = filenameBytes.length;
+    byte[] filenameLengthBytes = ByteBuffer.allocate(4).putInt(filenameLength).array();
+    byte[] content = new byte[filenameLengthBytes.length + filenameBytes.length];
+    System.arraycopy(filenameLengthBytes, 0, content, 0, filenameLengthBytes.length);
+    System.arraycopy(filenameBytes, 0, content, filenameLengthBytes.length, filenameBytes.length);
+    packet.setContent(content);
     
     Random random = new Random(); 
     int sequenceNumber = random.nextInt();
